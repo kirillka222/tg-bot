@@ -12,7 +12,11 @@ from aiogram.types import ErrorEvent, PreCheckoutQuery, Message, SuccessfulPayme
 import db
 from config import config
 from handlers import admin, browse, common, profile, shop, tasks
-from logging_middleware import ActivityMiddleware, LoggingMiddleware
+from logging_middleware import (
+    ActivityMiddleware,
+    LoggingMiddleware,
+    SubscriptionGateMiddleware,
+)
 
 # Настройка логирования
 logging.basicConfig(
@@ -47,6 +51,12 @@ def setup_dispatcher() -> Dispatcher:
 
     # Middleware, отменяющая авто-показ первого кружка при любой активности пользователя
     dp.update.outer_middleware(ActivityMiddleware())
+
+    # Middleware обязательной подписки: пока пользователь не подписался,
+    # ни одна кнопка и ни одно сообщение до хендлеров не доходит.
+    # Регистрируется ПОСЛЕ ActivityMiddleware, чтобы таймер авто-показа
+    # успевал отменяться даже у заблокированных пользователей.
+    dp.update.outer_middleware(SubscriptionGateMiddleware())
 
     # Регистрируем все роутеры
     routers = [

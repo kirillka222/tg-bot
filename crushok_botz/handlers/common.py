@@ -188,7 +188,10 @@ async def back_to_menu(message: Message, state: FSMContext) -> None:
 @router.message(Command("browse"))
 async def cmd_browse_from_menu(message: Message, bot: Bot) -> None:
     from handlers.browse import start_browsing
-    await start_browsing(message.from_user.id, bot, message.chat.id)
+    # user передаём в рекламные сети (SubGram/Flyer) для более точного подбора
+    await start_browsing(
+        message.from_user.id, bot, message.chat.id, user=message.from_user
+    )
 
 
 # 2. Смотреть анкеты
@@ -249,4 +252,6 @@ async def cmd_shop_from_menu(message: Message) -> None:
 @router.message(F.text == "Получить кружок")
 async def cmd_get_circle(message: Message, bot: Bot) -> None:
     from handlers.browse import start_browsing
-    await start_browsing(message.from_user.id, bot, message.chat.id)
+    await start_browsing(
+        message.from_user.id, bot, message.chat.id, user=message.from_user
+    )

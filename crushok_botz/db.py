@@ -137,6 +137,30 @@ CREATE TABLE IF NOT EXISTS ads_free_views (
     user_id     INTEGER PRIMARY KEY,
     free_views  INTEGER NOT NULL DEFAULT 0
 );
+
+-- Состояние обязательной подписки (ОП) по каждому пользователю.
+-- views_since_gate - сколько кружков посмотрел с последнего показа/прохождения ОП
+-- last_passed_at   - когда последний раз успешно прошёл проверку подписки (NULL = ни разу)
+-- gate_shown_count - сколько всего раз показывали блок ОП
+-- pending          - 1, если прямо сейчас висит непройденный блок ОП (пользователь заблокирован)
+-- pending_since    - когда выставили pending (для авто-снятия залипшей блокировки)
+-- last_hint_at     - когда последний раз напоминали "сначала подпишись"
+CREATE TABLE IF NOT EXISTS sub_gate (
+    user_id           INTEGER PRIMARY KEY,
+    views_since_gate  INTEGER NOT NULL DEFAULT 0,
+    last_passed_at    INTEGER,
+    gate_shown_count  INTEGER NOT NULL DEFAULT 0,
+    pending           INTEGER NOT NULL DEFAULT 0,
+    pending_since     INTEGER,
+    last_hint_at      INTEGER
+);
+
+-- Купленные просмотры (кнопка "Купить просмотры" в профиле)
+CREATE TABLE IF NOT EXISTS user_bought_views (
+    user_id     INTEGER PRIMARY KEY,
+    views       INTEGER NOT NULL DEFAULT 0,
+    updated_at  INTEGER
+);
 """
 
 DEFAULT_TASKS = [
@@ -170,6 +194,24 @@ async def init_db() -> None:
             print("✅ Добавлена колонка first_start в таблицу users")
         except aiosqlite.OperationalError:
             pass
+
+        # МИГРАЦИЯ: pin_order - номер закрепления кружка в ленте (0 = не закреплён).
+        # Кружки с pin_order > 0 показываются первыми в порядке возрастания номера.
+        try:
+            await db.execute("ALTER TABLE kruzhki ADD COLUMN pin_order INTEGER NOT NULL DEFAULT 0")
+            print("✅ Добавлена колонка pin_order в таблицу kruzhki")
+        except aiosqlite.OperationalError:
+            pass
+
+        await db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_kruzhok_views_viewer ON kruzhok_views (viewer_id)"
+        )
+        await db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_kruzhok_views_kruzhok ON kruzhok_views (kruzhok_id)"
+        )
+        await db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_kruzhki_owner ON kruzhki (owner_id)"
+        )
 
         for task_id, title, reward in DEFAULT_TASKS:
             await db.execute(
@@ -383,20 +425,30 @@ async def kruzhok_views_count(viewer_id: int) -> int:
 
 
 async def get_random_unseen_kruzhok(viewer_id: int) -> dict | None:
-    """Случайный непросмотренный кружок. Пользователи с priority > 0 показываются первыми."""
+    """Случайный непросмотренный кружок.
+
+    Порядок выдачи:
+    1) закреплённые админом кружки (pin_order > 0) - строго по возрастанию номера;
+    2) кружки пользователей с priority > 0;
+    3) всё остальное - случайно.
+    """
     async with aiosqlite.connect(config.db_path) as db:
         db.row_factory = aiosqlite.Row
         cur = await db.execute(
             """
-            SELECT k.kruzhok_id, k.owner_id, k.video_id, u.username, u.name,
-                   u.priority, u.is_seed
+            SELECT k.kruzhok_id, k.owner_id, k.video_id, k.pin_order,
+                   u.username, u.name, u.priority, u.is_seed
             FROM kruzhki k
             JOIN users u ON u.user_id = k.owner_id
             WHERE k.owner_id != ? AND u.banned = 0
               AND k.kruzhok_id NOT IN (
                   SELECT kruzhok_id FROM kruzhok_views WHERE viewer_id = ?
               )
-            ORDER BY u.priority DESC, RANDOM()
+            ORDER BY
+                CASE WHEN k.pin_order > 0 THEN 0 ELSE 1 END,
+                k.pin_order ASC,
+                u.priority DESC,
+                RANDOM()
             LIMIT 1
             """,
             (viewer_id, viewer_id),
@@ -470,15 +522,28 @@ async def anketa_mark_viewed(viewer_id: int, target_id: int) -> None:
 
 # ========== РЕАКЦИИ (ЛАЙКИ/ДИЗЛАЙКИ) ==========
 
-async def set_reaction(viewer_id: int, kruzhok_id: int, reaction: str) -> None:
-    """Поставить реакцию на кружок."""
+async def set_reaction(viewer_id: int, kruzhok_id: int, reaction: str) -> bool:
+    """Поставить реакцию на кружок.
+
+    Возвращает True, только если реакция ИЗМЕНИЛАСЬ (раньше её не было или она
+    была другой). Нужно, чтобы владелец кружка не получал уведомление каждый раз,
+    когда один и тот же человек жмёт на ту же кнопку.
+    """
     async with aiosqlite.connect(config.db_path) as db:
+        cur = await db.execute(
+            "SELECT reaction FROM reactions WHERE viewer_id = ? AND kruzhok_id = ?",
+            (viewer_id, kruzhok_id),
+        )
+        row = await cur.fetchone()
+        is_new = row is None or row[0] != reaction
+
         await db.execute(
             "INSERT OR REPLACE INTO reactions (viewer_id, kruzhok_id, reaction, created_at) "
             "VALUES (?, ?, ?, ?)",
             (viewer_id, kruzhok_id, reaction, int(time.time())),
         )
         await db.commit()
+        return is_new
 
 
 async def get_reaction_counts(kruzhok_id: int) -> tuple[int, int]:
@@ -680,9 +745,13 @@ async def get_total_kruzhki() -> int:
 
 
 async def get_total_views() -> int:
-    """Получает общее количество просмотров кружков."""
+    """Получает общее количество просмотров кружков.
+
+    Раньше здесь был запрос SUM(views) FROM kruzhki, но колонки views в таблице
+    нет - запрос падал с OperationalError и ломал админ-статистику.
+    """
     async with aiosqlite.connect(config.db_path) as db:
-        cur = await db.execute("SELECT SUM(views) FROM kruzhki")
+        cur = await db.execute("SELECT COUNT(*) FROM kruzhok_views")
         row = await cur.fetchone()
         return row[0] if row and row[0] else 0
 
@@ -1209,3 +1278,556 @@ async def mark_started(user_id: int) -> None:
             (user_id,)
         )
         await db.commit()
+
+# ========== КУПЛЕННЫЕ ПРОСМОТРЫ ==========
+
+async def add_user_views(user_id: int, amount: int) -> int:
+    """Начислить пользователю купленные просмотры его кружков.
+
+    Функция вызывалась из handlers/profile.py, но в db.py её не было -
+    покупка просмотров падала с AttributeError. Возвращает новый остаток.
+    """
+    async with aiosqlite.connect(config.db_path) as db:
+        await db.execute(
+            """
+            INSERT INTO user_bought_views (user_id, views, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET
+                views = views + excluded.views,
+                updated_at = excluded.updated_at
+            """,
+            (user_id, amount, int(time.time())),
+        )
+        await db.commit()
+        cur = await db.execute(
+            "SELECT views FROM user_bought_views WHERE user_id = ?", (user_id,)
+        )
+        row = await cur.fetchone()
+        return row[0] if row else 0
+
+
+async def get_user_bought_views(user_id: int) -> int:
+    """Сколько купленных просмотров осталось у пользователя."""
+    async with aiosqlite.connect(config.db_path) as db:
+        cur = await db.execute(
+            "SELECT views FROM user_bought_views WHERE user_id = ?", (user_id,)
+        )
+        row = await cur.fetchone()
+        return row[0] if row else 0
+
+
+# ==========================================================================
+# ОБЯЗАТЕЛЬНАЯ ПОДПИСКА (ОП): единая логика показа
+# ==========================================================================
+#
+# Правила (настраиваются в .env):
+#   * Новый пользователь смотрит FORCE_SUB_AFTER_VIEWS кружков бесплатно,
+#     после чего при попытке посмотреть следующий кружок всплывает ОП.
+#   * Пользователь, который хотя бы раз прошёл проверку подписки, следующие
+#     FORCE_SUB_COOLDOWN_HOURS часов не видит ОП вообще. Как только таймаут
+#     истёк - ОП всплывает снова (счётчик просмотров при этом не важен).
+#   * Пока ОП висит непройденной, pending = 1, и пользователь заблокирован
+#     на уровне middleware (см. logging_middleware.SubscriptionGateMiddleware).
+
+async def _gate_row(db, user_id: int) -> dict:
+    """Возвращает строку sub_gate, создавая её при необходимости."""
+    db.row_factory = aiosqlite.Row
+    cur = await db.execute("SELECT * FROM sub_gate WHERE user_id = ?", (user_id,))
+    row = await cur.fetchone()
+    if row is None:
+        await db.execute(
+            "INSERT OR IGNORE INTO sub_gate (user_id, views_since_gate) VALUES (?, 0)",
+            (user_id,),
+        )
+        await db.commit()
+        cur = await db.execute("SELECT * FROM sub_gate WHERE user_id = ?", (user_id,))
+        row = await cur.fetchone()
+    return dict(row)
+
+
+async def gate_get_state(user_id: int) -> dict:
+    """Получить состояние ОП пользователя."""
+    async with aiosqlite.connect(config.db_path) as db:
+        return await _gate_row(db, user_id)
+
+
+async def gate_register_view(user_id: int) -> None:
+    """Засчитать пользователю просмотр кружка (для счётчика до показа ОП)."""
+    async with aiosqlite.connect(config.db_path) as db:
+        await db.execute(
+            """
+            INSERT INTO sub_gate (user_id, views_since_gate)
+            VALUES (?, 1)
+            ON CONFLICT(user_id) DO UPDATE SET
+                views_since_gate = views_since_gate + 1
+            """,
+            (user_id,),
+        )
+        await db.commit()
+
+
+async def gate_should_show(user_id: int) -> bool:
+    """Пора ли показывать пользователю блок обязательной подписки."""
+    now = int(time.time())
+    cooldown = max(0, config.force_sub_cooldown_hours) * 3600
+
+    async with aiosqlite.connect(config.db_path) as db:
+        row = await _gate_row(db, user_id)
+
+    last_passed_at = row.get("last_passed_at")
+
+    # Уже подписывался: молчим ровно cooldown часов с момента прохождения.
+    if last_passed_at:
+        return (now - last_passed_at) >= cooldown
+
+    # Ни разу не проходил ОП: даём посмотреть N кружков бесплатно.
+    return row.get("views_since_gate", 0) >= max(0, config.force_sub_after_views)
+
+
+async def gate_mark_shown(user_id: int) -> None:
+    """Отметить, что блок ОП показан и пользователь заблокирован до подписки."""
+    now = int(time.time())
+    async with aiosqlite.connect(config.db_path) as db:
+        await db.execute(
+            """
+            INSERT INTO sub_gate (user_id, views_since_gate, gate_shown_count, pending, pending_since)
+            VALUES (?, 0, 1, 1, ?)
+            ON CONFLICT(user_id) DO UPDATE SET
+                views_since_gate = 0,
+                gate_shown_count = gate_shown_count + 1,
+                pending = 1,
+                pending_since = excluded.pending_since
+            """,
+            (user_id, now),
+        )
+        await db.commit()
+
+
+async def gate_mark_passed(user_id: int) -> None:
+    """Отметить, что пользователь прошёл проверку подписки.
+
+    Сбрасывает блокировку и запускает таймаут (FORCE_SUB_COOLDOWN_HOURS часов),
+    в течение которого ОП больше не показывается.
+    """
+    now = int(time.time())
+    async with aiosqlite.connect(config.db_path) as db:
+        await db.execute(
+            """
+            INSERT INTO sub_gate (user_id, views_since_gate, last_passed_at, pending, pending_since)
+            VALUES (?, 0, ?, 0, NULL)
+            ON CONFLICT(user_id) DO UPDATE SET
+                views_since_gate = 0,
+                last_passed_at = excluded.last_passed_at,
+                pending = 0,
+                pending_since = NULL
+            """,
+            (user_id, now),
+        )
+        await db.commit()
+
+
+async def gate_clear_pending(user_id: int) -> None:
+    """Снять блокировку, не запуская таймаут (например, при /start админом)."""
+    async with aiosqlite.connect(config.db_path) as db:
+        await db.execute(
+            "UPDATE sub_gate SET pending = 0, pending_since = NULL WHERE user_id = ?",
+            (user_id,),
+        )
+        await db.commit()
+
+
+async def gate_is_pending(user_id: int) -> bool:
+    """Заблокирован ли пользователь непройденной ОП прямо сейчас.
+
+    Страховка: если блок висит дольше GATE_PENDING_TTL_MINUTES (бот перезапускали,
+    сообщение потерялось и т.п.) - блокировка снимается автоматически, чтобы
+    пользователь не оказался запертым навсегда.
+    """
+    now = int(time.time())
+    ttl = max(1, config.gate_pending_ttl_minutes) * 60
+
+    async with aiosqlite.connect(config.db_path) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT pending, pending_since FROM sub_gate WHERE user_id = ?", (user_id,)
+        )
+        row = await cur.fetchone()
+        if row is None or not row["pending"]:
+            return False
+
+        pending_since = row["pending_since"] or now
+        if now - pending_since > ttl:
+            await db.execute(
+                "UPDATE sub_gate SET pending = 0, pending_since = NULL WHERE user_id = ?",
+                (user_id,),
+            )
+            await db.commit()
+            return False
+
+        return True
+
+
+async def gate_take_hint_slot(user_id: int) -> bool:
+    """Можно ли сейчас показать напоминание «сначала подпишись».
+
+    Возвращает True не чаще, чем раз в GATE_HINT_COOLDOWN_SECONDS секунд,
+    чтобы бот не спамил в ответ на каждое нажатие.
+    """
+    now = int(time.time())
+    cooldown = max(0, config.gate_hint_cooldown_seconds)
+
+    async with aiosqlite.connect(config.db_path) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            "SELECT last_hint_at FROM sub_gate WHERE user_id = ?", (user_id,)
+        )
+        row = await cur.fetchone()
+        last = row["last_hint_at"] if row and row["last_hint_at"] else 0
+
+        if now - last < cooldown:
+            return False
+
+        await db.execute(
+            """
+            INSERT INTO sub_gate (user_id, last_hint_at) VALUES (?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET last_hint_at = excluded.last_hint_at
+            """,
+            (user_id, now),
+        )
+        await db.commit()
+        return True
+
+
+async def gate_reset_user(user_id: int) -> None:
+    """Полный сброс состояния ОП пользователя (админская команда)."""
+    async with aiosqlite.connect(config.db_path) as db:
+        await db.execute("DELETE FROM sub_gate WHERE user_id = ?", (user_id,))
+        await db.execute("DELETE FROM ads_free_views WHERE user_id = ?", (user_id,))
+        await db.commit()
+
+
+# ==========================================================================
+# АДМИНКА: СПИСОК ВСЕХ КРУЖКОВ (ПАГИНАЦИЯ, УДАЛЕНИЕ, ЗАКРЕПЛЕНИЕ)
+# ==========================================================================
+
+async def admin_count_circles() -> int:
+    """Общее количество кружков в базе."""
+    async with aiosqlite.connect(config.db_path) as db:
+        cur = await db.execute("SELECT COUNT(*) FROM kruzhki")
+        row = await cur.fetchone()
+        return row[0] if row else 0
+
+
+async def admin_get_circles_page(limit: int, offset: int) -> list[dict]:
+    """Страница списка кружков для админки.
+
+    Порядок совпадает с порядком показа в ленте: сначала закреплённые
+    (по возрастанию номера), затем остальные - от новых к старым.
+    """
+    async with aiosqlite.connect(config.db_path) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            """
+            SELECT
+                k.kruzhok_id,
+                k.owner_id,
+                k.video_id,
+                k.created_at,
+                COALESCE(k.pin_order, 0) AS pin_order,
+                u.username,
+                u.name,
+                u.banned,
+                u.is_seed,
+                (SELECT COUNT(*) FROM kruzhok_views v WHERE v.kruzhok_id = k.kruzhok_id) AS views,
+                (SELECT COUNT(*) FROM reactions r
+                  WHERE r.kruzhok_id = k.kruzhok_id AND r.reaction = 'like') AS likes,
+                (SELECT COUNT(*) FROM reactions r
+                  WHERE r.kruzhok_id = k.kruzhok_id AND r.reaction = 'dislike') AS dislikes
+            FROM kruzhki k
+            LEFT JOIN users u ON u.user_id = k.owner_id
+            ORDER BY
+                CASE WHEN COALESCE(k.pin_order, 0) > 0 THEN 0 ELSE 1 END,
+                k.pin_order ASC,
+                k.created_at DESC,
+                k.kruzhok_id DESC
+            LIMIT ? OFFSET ?
+            """,
+            (limit, offset),
+        )
+        return [dict(r) for r in await cur.fetchall()]
+
+
+async def admin_get_circle(kruzhok_id: int) -> dict | None:
+    """Полная информация об одном кружке для админки."""
+    async with aiosqlite.connect(config.db_path) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            """
+            SELECT
+                k.kruzhok_id, k.owner_id, k.video_id, k.created_at,
+                COALESCE(k.pin_order, 0) AS pin_order,
+                u.username, u.name, u.banned, u.is_seed,
+                (SELECT COUNT(*) FROM kruzhok_views v WHERE v.kruzhok_id = k.kruzhok_id) AS views,
+                (SELECT COUNT(*) FROM reactions r
+                  WHERE r.kruzhok_id = k.kruzhok_id AND r.reaction = 'like') AS likes,
+                (SELECT COUNT(*) FROM reactions r
+                  WHERE r.kruzhok_id = k.kruzhok_id AND r.reaction = 'dislike') AS dislikes
+            FROM kruzhki k
+            LEFT JOIN users u ON u.user_id = k.owner_id
+            WHERE k.kruzhok_id = ?
+            """,
+            (kruzhok_id,),
+        )
+        row = await cur.fetchone()
+        return dict(row) if row else None
+
+
+async def admin_delete_kruzhok(kruzhok_id: int) -> bool:
+    """Удалить любой кружок вместе с его реакциями и просмотрами (без проверки владельца)."""
+    async with aiosqlite.connect(config.db_path) as db:
+        cur = await db.execute(
+            "SELECT 1 FROM kruzhki WHERE kruzhok_id = ?", (kruzhok_id,)
+        )
+        if await cur.fetchone() is None:
+            return False
+
+        await db.execute("DELETE FROM reactions WHERE kruzhok_id = ?", (kruzhok_id,))
+        await db.execute("DELETE FROM kruzhok_views WHERE kruzhok_id = ?", (kruzhok_id,))
+        await db.execute("DELETE FROM kruzhki WHERE kruzhok_id = ?", (kruzhok_id,))
+        await db.commit()
+        return True
+
+
+async def admin_set_pin_order(kruzhok_id: int, position: int) -> bool:
+    """Закрепить кружок под конкретным номером (0 = снять закрепление).
+
+    Если номер уже занят другим кружком, остальные закреплённые кружки,
+    начиная с этого номера, сдвигаются на единицу вниз - так номера остаются
+    уникальными и идут подряд.
+    """
+    async with aiosqlite.connect(config.db_path) as db:
+        cur = await db.execute(
+            "SELECT 1 FROM kruzhki WHERE kruzhok_id = ?", (kruzhok_id,)
+        )
+        if await cur.fetchone() is None:
+            return False
+
+        if position <= 0:
+            await db.execute(
+                "UPDATE kruzhki SET pin_order = 0 WHERE kruzhok_id = ?", (kruzhok_id,)
+            )
+            await db.commit()
+            return True
+
+        # Освобождаем занятый номер, сдвигая остальные закреплённые вниз
+        await db.execute("UPDATE kruzhki SET pin_order = 0 WHERE kruzhok_id = ?", (kruzhok_id,))
+        await db.execute(
+            "UPDATE kruzhki SET pin_order = pin_order + 1 "
+            "WHERE pin_order >= ? AND pin_order > 0",
+            (position,),
+        )
+        await db.execute(
+            "UPDATE kruzhki SET pin_order = ? WHERE kruzhok_id = ?", (position, kruzhok_id)
+        )
+        await db.commit()
+
+        await _normalize_pin_orders(db)
+        return True
+
+
+async def _normalize_pin_orders(db) -> None:
+    """Перенумеровывает закреплённые кружки подряд: 1, 2, 3, ... без дыр."""
+    cur = await db.execute(
+        "SELECT kruzhok_id FROM kruzhki WHERE pin_order > 0 "
+        "ORDER BY pin_order ASC, kruzhok_id ASC"
+    )
+    rows = await cur.fetchall()
+    for index, row in enumerate(rows, start=1):
+        await db.execute(
+            "UPDATE kruzhki SET pin_order = ? WHERE kruzhok_id = ?", (index, row[0])
+        )
+    await db.commit()
+
+
+async def admin_get_pinned_circles() -> list[dict]:
+    """Список закреплённых кружков в порядке их показа."""
+    async with aiosqlite.connect(config.db_path) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute(
+            """
+            SELECT k.kruzhok_id, k.owner_id, k.pin_order, u.username, u.name
+            FROM kruzhki k
+            LEFT JOIN users u ON u.user_id = k.owner_id
+            WHERE k.pin_order > 0
+            ORDER BY k.pin_order ASC
+            """
+        )
+        return [dict(r) for r in await cur.fetchall()]
+
+
+async def admin_unpin_all() -> int:
+    """Снять закрепление со всех кружков. Возвращает количество откреплённых."""
+    async with aiosqlite.connect(config.db_path) as db:
+        cur = await db.execute("SELECT COUNT(*) FROM kruzhki WHERE pin_order > 0")
+        row = await cur.fetchone()
+        count = row[0] if row else 0
+        await db.execute("UPDATE kruzhki SET pin_order = 0")
+        await db.commit()
+        return count
+
+
+# ==========================================================================
+# РАСШИРЕННАЯ СТАТИСТИКА ДЛЯ /stats
+# ==========================================================================
+
+async def get_extended_stats() -> dict:
+    """Собирает подробную статистику бота одним проходом по базе."""
+    now = int(time.time())
+    day = now - 86400
+    week = now - 7 * 86400
+    month = now - 30 * 86400
+
+    async def one(db, sql: str, params: tuple = ()) -> int:
+        cur = await db.execute(sql, params)
+        row = await cur.fetchone()
+        return (row[0] if row and row[0] is not None else 0)
+
+    stats: dict = {}
+
+    async with aiosqlite.connect(config.db_path) as db:
+        db.row_factory = aiosqlite.Row
+
+        # ----- Пользователи -----
+        stats["users_total"] = await one(db, "SELECT COUNT(*) FROM users WHERE is_seed = 0")
+        stats["users_seed"] = await one(db, "SELECT COUNT(*) FROM users WHERE is_seed = 1")
+        stats["users_banned"] = await one(db, "SELECT COUNT(*) FROM users WHERE banned = 1")
+        stats["users_with_anketa"] = await one(
+            db,
+            "SELECT COUNT(*) FROM users WHERE is_seed = 0 AND name IS NOT NULL AND name != ''",
+        )
+        stats["users_new_day"] = await one(
+            db, "SELECT COUNT(*) FROM users WHERE is_seed = 0 AND created_at >= ?", (day,)
+        )
+        stats["users_new_week"] = await one(
+            db, "SELECT COUNT(*) FROM users WHERE is_seed = 0 AND created_at >= ?", (week,)
+        )
+        stats["users_new_month"] = await one(
+            db, "SELECT COUNT(*) FROM users WHERE is_seed = 0 AND created_at >= ?", (month,)
+        )
+        stats["users_from_refs"] = await one(
+            db, "SELECT COUNT(*) FROM users WHERE referrer_id IS NOT NULL AND is_seed = 0"
+        )
+
+        # ----- Активность -----
+        stats["dau"] = await one(
+            db, "SELECT COUNT(DISTINCT viewer_id) FROM kruzhok_views WHERE viewed_at >= ?", (day,)
+        )
+        stats["wau"] = await one(
+            db, "SELECT COUNT(DISTINCT viewer_id) FROM kruzhok_views WHERE viewed_at >= ?", (week,)
+        )
+        stats["mau"] = await one(
+            db, "SELECT COUNT(DISTINCT viewer_id) FROM kruzhok_views WHERE viewed_at >= ?", (month,)
+        )
+
+        # ----- Кружки -----
+        stats["circles_total"] = await one(db, "SELECT COUNT(*) FROM kruzhki")
+        stats["circles_day"] = await one(
+            db, "SELECT COUNT(*) FROM kruzhki WHERE created_at >= ?", (day,)
+        )
+        stats["circles_week"] = await one(
+            db, "SELECT COUNT(*) FROM kruzhki WHERE created_at >= ?", (week,)
+        )
+        stats["circles_pinned"] = await one(db, "SELECT COUNT(*) FROM kruzhki WHERE pin_order > 0")
+        stats["circle_authors"] = await one(db, "SELECT COUNT(DISTINCT owner_id) FROM kruzhki")
+
+        # ----- Просмотры -----
+        stats["views_total"] = await one(db, "SELECT COUNT(*) FROM kruzhok_views")
+        stats["views_day"] = await one(
+            db, "SELECT COUNT(*) FROM kruzhok_views WHERE viewed_at >= ?", (day,)
+        )
+        stats["views_week"] = await one(
+            db, "SELECT COUNT(*) FROM kruzhok_views WHERE viewed_at >= ?", (week,)
+        )
+
+        # ----- Реакции -----
+        stats["likes"] = await one(
+            db, "SELECT COUNT(*) FROM reactions WHERE reaction = 'like'"
+        )
+        stats["dislikes"] = await one(
+            db, "SELECT COUNT(*) FROM reactions WHERE reaction = 'dislike'"
+        )
+        stats["likes_day"] = await one(
+            db,
+            "SELECT COUNT(*) FROM reactions WHERE reaction = 'like' AND created_at >= ?",
+            (day,),
+        )
+
+        # ----- Экономика -----
+        stats["coins_total"] = await one(
+            db, "SELECT SUM(coins) FROM users WHERE is_seed = 0"
+        )
+        stats["reveals_total"] = await one(db, "SELECT COUNT(*) FROM author_reveals")
+        stats["reveals_day"] = await one(
+            db, "SELECT COUNT(*) FROM author_reveals WHERE revealed_at >= ?", (day,)
+        )
+        stats["unlocks_total"] = await one(db, "SELECT COUNT(*) FROM user_circles_unlocked")
+        stats["purchases_total"] = await one(db, "SELECT COUNT(*) FROM purchases")
+        stats["tasks_done"] = await one(db, "SELECT COUNT(*) FROM user_tasks")
+
+        # ----- Обязательная подписка -----
+        stats["gate_shown_total"] = await one(db, "SELECT SUM(gate_shown_count) FROM sub_gate")
+        stats["gate_passed_users"] = await one(
+            db, "SELECT COUNT(*) FROM sub_gate WHERE last_passed_at IS NOT NULL"
+        )
+        stats["gate_pending_users"] = await one(
+            db, "SELECT COUNT(*) FROM sub_gate WHERE pending = 1"
+        )
+        stats["ads_disabled_users"] = await one(
+            db, "SELECT COUNT(*) FROM ads_disabled WHERE disabled_until > ?", (now,)
+        )
+
+        # ----- Топ авторов по лайкам -----
+        cur = await db.execute(
+            """
+            SELECT k.owner_id,
+                   u.username,
+                   u.name,
+                   COUNT(*) AS likes
+            FROM reactions r
+            JOIN kruzhki k ON k.kruzhok_id = r.kruzhok_id
+            LEFT JOIN users u ON u.user_id = k.owner_id
+            WHERE r.reaction = 'like'
+            GROUP BY k.owner_id
+            ORDER BY likes DESC
+            LIMIT 5
+            """
+        )
+        stats["top_authors"] = [dict(r) for r in await cur.fetchall()]
+
+        # ----- Топ пригласивших -----
+        cur = await db.execute(
+            """
+            SELECT referrer_id, COUNT(*) AS invited
+            FROM users
+            WHERE referrer_id IS NOT NULL
+            GROUP BY referrer_id
+            ORDER BY invited DESC
+            LIMIT 5
+            """
+        )
+        stats["top_referrers"] = [dict(r) for r in await cur.fetchall()]
+
+    # ----- Производные метрики -----
+    users = stats["users_total"] or 1
+    stats["avg_circles_per_user"] = round(stats["circles_total"] / users, 2)
+    stats["avg_views_per_user"] = round(stats["views_total"] / users, 2)
+    stats["avg_coins"] = round((stats["coins_total"] or 0) / users, 1)
+
+    total_reactions = stats["likes"] + stats["dislikes"]
+    stats["reactions_total"] = total_reactions
+    stats["like_rate"] = round(stats["likes"] * 100 / total_reactions, 1) if total_reactions else 0.0
+
+    stats["anketa_rate"] = round(stats["users_with_anketa"] * 100 / users, 1)
+    stats["ref_rate"] = round(stats["users_from_refs"] * 100 / users, 1)
+
+    return stats

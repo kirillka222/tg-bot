@@ -263,7 +263,7 @@ async def _check_subgram(user_id: int, bot: Bot, chat_id: int, user=None) -> boo
 
         await bot.send_message(
             chat_id,
-            "Перед просмотром кружков подпишитесь на каналы:\n\nПосле подписки нажмите «Проверить подписку»",
+            GATE_TEXT,
             reply_markup=_subgram_kb(pending),
         )
         return True
@@ -336,27 +336,91 @@ async def _check_botohub(user_id: int, bot: Bot, chat_id: int) -> bool:
 
     await bot.send_message(
         chat_id,
-        "Перед просмотром кружков подпишитесь на каналы:\n\nПосле подписки нажмите «Проверить подписку»",
+        GATE_TEXT,
         reply_markup=_botohub_kb(links),
     )
     return True
 
 
-async def _check_and_show_ads(user_id: int, bot: Bot, chat_id: int, force: bool = False, user=None) -> bool:
-    if await db.is_ads_disabled(user_id):
-        return False
+GATE_TEXT = (
+    "Перед просмотром кружков подпишитесь на каналы:\n\n"
+    "После подписки нажмите «Проверить подписку»"
+)
 
-    # Не запрашиваем подписку сразу - даём посмотреть несколько кружков бесплатно,
-    # а затем показываем блок подписки раз в ADS_AFTER_VIEWS кружков. Счётчик - "свежий"
-    # (сбрасывается после каждой проверки), а не общее число просмотров за всё время.
-    if config.ads_after_views > 0:
-        free_views = await db.get_free_views(user_id)
-        if free_views < config.ads_after_views:
-            await db.increment_free_views(user_id)
+GATE_BLOCKED_TEXT = (
+    "⛔ <b>Доступ закрыт</b>\n\n"
+    "Чтобы продолжить пользоваться ботом, подпишитесь на каналы из сообщения выше "
+    "и нажмите «Проверить подписку»."
+)
+
+
+def _gate_recheck_kb() -> InlineKeyboardMarkup:
+    """Универсальная кнопка перепроверки подписки.
+
+    Нужна как запасной выход: какой бы рекламной сетью ни был показан блок ОП,
+    пользователь всегда может перепроверить подписку и разблокироваться.
+    """
+    btn = InlineKeyboardButton(
+        text="✅ Проверить подписку",
+        callback_data="gate_recheck",
+    )
+    btn.style = "success"
+    return InlineKeyboardMarkup(inline_keyboard=[[btn]])
+
+
+async def notify_gate_blocked(bot: Bot, chat_id: int, user_id: int) -> None:
+    """Напоминает заблокированному пользователю, что нужно подписаться.
+
+    Вызывается из SubscriptionGateMiddleware при попытке потыкать кнопки, пока
+    висит непройденная ОП. Частота ограничена GATE_HINT_COOLDOWN_SECONDS.
+    """
+    if not await db.gate_take_hint_slot(user_id):
+        return
+    try:
+        await bot.send_message(
+            chat_id,
+            GATE_BLOCKED_TEXT,
+            reply_markup=_gate_recheck_kb(),
+            parse_mode="HTML",
+        )
+    except Exception as e:
+        logger.debug("Не удалось отправить напоминание об ОП пользователю %s: %s", user_id, e)
+
+
+async def _show_own_channels_gate(chat_id: int, user_id: int, bot: Bot) -> None:
+    """Показывает блок подписки на собственные каналы бота (CHANNELS в .env)."""
+    await db.increment_ads_shown(user_id)
+    await db.reset_subscriptions_after_ads(user_id)
+
+    text = "Перед просмотром кружков подпишитесь на каналы:\n\n"
+    for i, channel in enumerate(config.channels, 1):
+        text += str(i) + ". " + channel['name'] + "\n"
+
+    text += "\nПосле подписки нажмите «Проверить подписку»"
+
+    await bot.send_message(chat_id, text, reply_markup=_channels_kb())
+
+
+async def _own_channels_all_subscribed(user_id: int, bot: Bot) -> bool:
+    """Проверяет подписку на собственные каналы бота."""
+    for channel in config.channels:
+        try:
+            member = await bot.get_chat_member(channel['id'], user_id)
+            if member.status not in ['member', 'administrator', 'creator']:
+                return False
+        except Exception as e:
+            logger.warning("Ошибка проверки подписки на %s: %s", channel['id'], e)
             return False
-        await db.reset_free_views(user_id)
+    return True
 
-    # 1) Flyer - при необходимости сам отправляет юзеру блок подписки
+
+async def _run_subscription_providers(user_id: int, bot: Bot, chat_id: int, user=None) -> bool:
+    """Прогоняет все источники ОП по очереди.
+
+    Возвращает True, если какой-то из них показал пользователю блок подписки
+    (то есть контент показывать нельзя).
+    """
+    # 1) Flyer - сам отправляет юзеру блок подписки
     language_code = getattr(user, "language_code", None) if user else None
     if not await flyer_ads.check_flyer(user_id, language_code=language_code):
         return True
@@ -369,45 +433,65 @@ async def _check_and_show_ads(user_id: int, bot: Bot, chat_id: int, force: bool 
     if await _check_botohub(user_id, bot, chat_id):
         return True
 
-    if not config.force_subscription:
-        return False
-
-    all_subscribed = True
-    for channel in config.channels:
-        try:
-            member = await bot.get_chat_member(channel['id'], user_id)
-            if member.status not in ['member', 'administrator', 'creator']:
-                all_subscribed = False
-                break
-        except Exception:
-            all_subscribed = False
-            break
-
-    if all_subscribed:
-        return False
-
-    if force or not all_subscribed:
-        await _show_ads(chat_id, user_id, bot)
-        return True
+    # 4) Собственные каналы бота
+    if config.force_subscription and config.channels:
+        if not await _own_channels_all_subscribed(user_id, bot):
+            await _show_own_channels_gate(chat_id, user_id, bot)
+            return True
 
     return False
 
 
+async def ensure_subscription(
+    user_id: int,
+    bot: Bot,
+    chat_id: int,
+    user=None,
+    force_check: bool = False,
+) -> bool:
+    """Главная точка входа для обязательной подписки.
+
+    Возвращает True, если пользователю показан блок ОП и контент показывать НЕЛЬЗЯ.
+
+    Правила:
+      * новый пользователь смотрит FORCE_SUB_AFTER_VIEWS кружков бесплатно;
+      * тот, кто уже проходил проверку, не видит ОП FORCE_SUB_COOLDOWN_HOURS часов;
+      * пока ОП не пройдена, пользователь помечен как pending и заблокирован
+        (см. SubscriptionGateMiddleware) - потыкать другие кнопки не получится.
+    """
+    # Админов не мучаем
+    if user_id in config.admin_ids:
+        return False
+
+    # Купил "отключить рекламу" - ОП не показываем и снимаем блокировку
+    if await db.is_ads_disabled(user_id):
+        await db.gate_clear_pending(user_id)
+        return False
+
+    # force_check=True - принудительная перепроверка (кнопка "Проверить подписку")
+    if not force_check and not await db.gate_should_show(user_id):
+        return False
+
+    if await _run_subscription_providers(user_id, bot, chat_id, user=user):
+        await db.gate_mark_shown(user_id)
+        return True
+
+    # Показывать нечего / пользователь уже на всё подписан - засчитываем проверку
+    # и включаем таймаут на FORCE_SUB_COOLDOWN_HOURS часов.
+    await db.gate_mark_passed(user_id)
+    return False
+
+
+async def _check_and_show_ads(
+    user_id: int, bot: Bot, chat_id: int, force: bool = False, user=None
+) -> bool:
+    """Обратно совместимая обёртка над ensure_subscription()."""
+    return await ensure_subscription(user_id, bot, chat_id, user=user)
+
+
 async def _show_ads(chat_id: int, user_id: int, bot: Bot) -> None:
-    await db.increment_ads_shown(user_id)
-    await db.reset_subscriptions_after_ads(user_id)
-
-    text = "Перед просмотром кружков подпишитесь на каналы:\n\n"
-    for i, channel in enumerate(config.channels, 1):
-        text += str(i) + ". " + channel['name'] + "\n"
-
-    text += "\nПосле подписки нажмите «Проверить подписку»"
-
-    await bot.send_message(
-        chat_id,
-        text,
-        reply_markup=_channels_kb()
-    )
+    """Совместимость со старым кодом: показать блок собственных каналов."""
+    await _show_own_channels_gate(chat_id, user_id, bot)
 
 
 async def update_streak(user_id: int) -> None:
@@ -444,6 +528,9 @@ async def _send_kruzhok(chat_id: int, viewer_id: int, bot: Bot, kruzhok: dict) -
         return
 
     await db.kruzhok_mark_viewed(viewer_id, kruzhok["kruzhok_id"])
+    # Считаем просмотр для счётчика обязательной подписки
+    # (новый пользователь получает ОП после FORCE_SUB_AFTER_VIEWS кружков).
+    await db.gate_register_view(viewer_id)
 
     author = await db.get_user(kruzhok["owner_id"])
     display_name = get_user_display_name(author) if author else "Аноним"
@@ -483,12 +570,12 @@ async def _send_kruzhok(chat_id: int, viewer_id: int, bot: Bot, kruzhok: dict) -
     await update_streak(viewer_id)
 
 
-async def start_browsing(user_id: int, bot: Bot, chat_id: int) -> None:
+async def start_browsing(user_id: int, bot: Bot, chat_id: int, user=None) -> None:
     if await db.is_banned(user_id):
         await bot.send_message(chat_id, "Ты заблокирован.")
         return
 
-    if await _check_and_show_ads(user_id, bot, chat_id, force=True):
+    if await ensure_subscription(user_id, bot, chat_id, user=user):
         return
 
     balance = await db.get_balance(user_id)
@@ -517,12 +604,12 @@ async def start_browsing(user_id: int, bot: Bot, chat_id: int) -> None:
     await _send_kruzhok(chat_id, user_id, bot, kruzhok)
 
 
-async def _next_kruzhok_no_delay(user_id: int, bot: Bot, chat_id: int) -> None:
+async def _next_kruzhok_no_delay(user_id: int, bot: Bot, chat_id: int, user=None) -> None:
     if await db.is_banned(user_id):
         await bot.send_message(chat_id, "Ты заблокирован.")
         return
 
-    if await _check_and_show_ads(user_id, bot, chat_id, force=True):
+    if await ensure_subscription(user_id, bot, chat_id, user=user):
         return
 
     balance = await db.get_balance(user_id)
@@ -720,7 +807,9 @@ async def send_new_circle_notifications(bot: Bot) -> None:
 @router.message(F.text == "Смотреть кружки")
 @router.message(Command("browse"))
 async def cmd_browse_kruzhki(message: Message, bot: Bot) -> None:
-    await start_browsing(message.from_user.id, bot, message.chat.id)
+    await start_browsing(
+        message.from_user.id, bot, message.chat.id, user=message.from_user
+    )
 
 
 @router.message(F.text == "Смотреть анкеты")
@@ -732,7 +821,9 @@ async def cmd_browse_anketas(message: Message, bot: Bot) -> None:
 @router.callback_query(F.data == "next_kruzhok")
 async def cb_next_kruzhok(callback: CallbackQuery, bot: Bot) -> None:
     await callback.answer()
-    await _next_kruzhok_no_delay(callback.from_user.id, bot, callback.message.chat.id)
+    await _next_kruzhok_no_delay(
+        callback.from_user.id, bot, callback.message.chat.id, user=callback.from_user
+    )
 
 
 @router.callback_query(F.data.startswith("next_anketa_"))
@@ -751,7 +842,9 @@ async def cb_start_browsing_from_notification(callback: CallbackQuery, bot: Bot)
         await callback.message.delete()
     except Exception:
         pass
-    await start_browsing(callback.from_user.id, bot, callback.message.chat.id)
+    await start_browsing(
+        callback.from_user.id, bot, callback.message.chat.id, user=callback.from_user
+    )
 
 
 @router.callback_query(F.data == "go_shop")
@@ -798,6 +891,8 @@ async def cb_check_subscription(callback: CallbackQuery, bot: Bot) -> None:
             not_subscribed.append(channel['name'])
 
     if all_subscribed:
+        # Проверка пройдена: снимаем блокировку и включаем таймаут на 24ч
+        await db.gate_mark_passed(user_id)
         try:
             await callback.message.delete()
         except Exception:
@@ -873,6 +968,7 @@ async def cb_subgram_check(callback: CallbackQuery, bot: Bot) -> None:
 
     if response is None:
         # SubGram недоступен - не держим юзера в заложниках
+        await db.gate_mark_passed(user_id)
         try:
             await callback.message.delete()
         except Exception:
@@ -888,7 +984,7 @@ async def cb_subgram_check(callback: CallbackQuery, bot: Bot) -> None:
         if pending:
             try:
                 await callback.message.edit_text(
-                    "Перед просмотром кружков подпишитесь на каналы:\n\nПосле подписки нажмите «Проверить подписку»",
+                    GATE_TEXT,
                     reply_markup=_subgram_kb(pending),
                 )
             except Exception:
@@ -896,6 +992,7 @@ async def cb_subgram_check(callback: CallbackQuery, bot: Bot) -> None:
             return
 
     # status == "ok" (или больше нечего показывать) - пускаем дальше
+    await db.gate_mark_passed(user_id)
     try:
         await callback.message.delete()
     except Exception:
@@ -914,6 +1011,7 @@ async def cb_botohub_check(callback: CallbackQuery, bot: Bot) -> None:
 
     if response is None:
         # BotoHub недоступен - не держим юзера в заложниках
+        await db.gate_mark_passed(user_id)
         try:
             await callback.message.delete()
         except Exception:
@@ -926,7 +1024,7 @@ async def cb_botohub_check(callback: CallbackQuery, bot: Bot) -> None:
         if links:
             try:
                 await callback.message.edit_text(
-                    "Перед просмотром кружков подпишитесь на каналы:\n\nПосле подписки нажмите «Проверить подписку»",
+                    GATE_TEXT,
                     reply_markup=_botohub_kb(links),
                 )
             except Exception:
@@ -934,6 +1032,7 @@ async def cb_botohub_check(callback: CallbackQuery, bot: Bot) -> None:
             return
 
     # completed/skip (или ссылок больше нет) - пускаем дальше
+    await db.gate_mark_passed(user_id)
     try:
         await callback.message.delete()
     except Exception:
@@ -944,6 +1043,32 @@ async def cb_botohub_check(callback: CallbackQuery, bot: Bot) -> None:
 @router.callback_query(F.data == "already_subscribed")
 async def cb_already_subscribed(callback: CallbackQuery) -> None:
     await callback.answer("Вы уже подписаны на этот канал!")
+
+
+@router.callback_query(F.data == "gate_recheck")
+async def cb_gate_recheck(callback: CallbackQuery, bot: Bot) -> None:
+    """Универсальная перепроверка подписки.
+
+    Работает для любого источника ОП (Flyer / SubGram / BotoHub / свои каналы)
+    и служит запасным выходом, чтобы пользователь не мог зависнуть в блокировке.
+    """
+    await callback.answer("Проверяю...")
+    user_id = callback.from_user.id
+    chat_id = callback.message.chat.id
+
+    blocked = await ensure_subscription(
+        user_id, bot, chat_id, user=callback.from_user, force_check=True
+    )
+    if blocked:
+        return
+
+    try:
+        await callback.message.delete()
+    except Exception:
+        pass
+
+    await callback.message.answer("✅ Подписка подтверждена! Продолжаем просмотр.")
+    await _next_kruzhok_no_delay(user_id, bot, chat_id, user=callback.from_user)
 
 
 @router.callback_query(F.data == "disable_ads")
@@ -966,6 +1091,8 @@ async def cb_disable_ads(callback: CallbackQuery, bot: Bot) -> None:
 
     until = int(time.time()) + 86400
     await db.set_ads_disabled(user_id, until)
+    # Реклама отключена - снимаем блокировку обязательной подписки
+    await db.gate_clear_pending(user_id)
 
     await callback.answer("Реклама отключена на 1 день!", show_alert=True)
     try:
@@ -1027,24 +1154,33 @@ async def cb_reaction(callback: CallbackQuery, bot: Bot) -> None:
     kruzhok_id = int(kruzhok_id_str)
     reaction = "like" if reaction_type == "like" else "dislike"
 
-    await db.set_reaction(callback.from_user.id, kruzhok_id, reaction)
+    # is_new = True только если реакция реально изменилась. Раньше уведомление
+    # владельцу уходило на КАЖДОЕ нажатие - отсюда и был спам "+5 монет".
+    is_new = await db.set_reaction(callback.from_user.id, kruzhok_id, reaction)
+
     kb = await _kruzhok_kb(kruzhok_id)
     try:
         await callback.message.edit_reply_markup(reply_markup=kb)
     except Exception:
         pass
 
-    if reaction == "like":
+    if reaction == "like" and is_new:
         owner_id = await _find_owner(kruzhok_id)
         if owner_id and owner_id != callback.from_user.id:
-            await db.add_coins(owner_id, 5)
-            try:
-                await bot.send_message(
-                    owner_id,
-                    "❤️ Кто-то поставил лайк на твой кружок! +5 монет"
-                )
-            except Exception:
-                pass
+            # Монеты за лайк по умолчанию НЕ начисляются (LIKE_REWARD=0 в .env).
+            # Если захочешь вернуть награду - поставь LIKE_REWARD=5.
+            reward = max(0, config.like_reward)
+            if reward:
+                await db.add_coins(owner_id, reward)
+
+            if config.like_notify:
+                text = "❤️ Кто-то поставил лайк на твой кружок!"
+                if reward:
+                    text += f" +{reward} монет"
+                try:
+                    await bot.send_message(owner_id, text)
+                except Exception:
+                    pass
 
     await callback.answer("Лайк!" if reaction == "like" else "Дизлайк!")
 

@@ -173,5 +173,37 @@ class Config:
     # Уведомления посмотреть кружок
     icon_emoji_notification: str = os.getenv("ICON_EMOJI_NOTIFICATION", "📩")
 
+    # ===== ОБЯЗАТЕЛЬНАЯ ПОДПИСКА (ОП) =====
+    # Сколько кружков новый пользователь смотрит БЕСПЛАТНО до первого показа ОП.
+    # 2 = ОП всплывёт при попытке посмотреть 3-й кружок.
+    # (ADS_AFTER_VIEWS оставлен как запасной вариант для совместимости со старым .env)
+    force_sub_after_views: int = int(
+        os.getenv("FORCE_SUB_AFTER_VIEWS", os.getenv("ADS_AFTER_VIEWS", "2"))
+    )
+
+    # Сколько часов не трогаем пользователя после того, как он прошёл проверку
+    # подписки. По истечении таймаута ОП всплывает снова.
+    force_sub_cooldown_hours: int = int(os.getenv("FORCE_SUB_COOLDOWN_HOURS", "24"))
+
+    # Страховка от "залипшей" блокировки: если пользователь висит в состоянии
+    # "показана ОП" дольше указанного времени (бот перезапускали, сеть отвалилась
+    # и т.п.) - блокировка снимается автоматически.
+    gate_pending_ttl_minutes: int = int(os.getenv("GATE_PENDING_TTL_MINUTES", "180"))
+
+    # Как часто (в секундах) повторно напоминать заблокированному пользователю
+    # о том, что нужно подписаться, если он продолжает жать кнопки.
+    gate_hint_cooldown_seconds: int = int(os.getenv("GATE_HINT_COOLDOWN_SECONDS", "20"))
+
+    # ===== НАГРАДА ЗА ЛАЙК =====
+    # 0 = за лайк кружка монеты НЕ начисляются (значение по умолчанию).
+    like_reward: int = int(os.getenv("LIKE_REWARD", "0"))
+
+    # Слать ли владельцу уведомление о новом лайке (без монет).
+    like_notify: bool = os.getenv("LIKE_NOTIFY", "True").lower() == "true"
+
+    # ===== АДМИНКА =====
+    # Сколько кружков показывать на одной странице в /circles
+    admin_circles_per_page: int = int(os.getenv("ADMIN_CIRCLES_PER_PAGE", "5"))
+
 
 config = Config()
