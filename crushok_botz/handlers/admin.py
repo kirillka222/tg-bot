@@ -23,6 +23,16 @@ def _is_admin(user_id: int) -> bool:
     return user_id in config.admin_ids
 
 
+async def safe_answer(
+    callback: CallbackQuery, text: str = "", show_alert: bool = False
+) -> None:
+    """callback.answer(), не падающий на устаревшем callback query."""
+    try:
+        await callback.answer(text, show_alert=show_alert)
+    except Exception as e:
+        logger.debug("Не удалось ответить на callback: %s", e)
+
+
 # ========== ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ==========
 
 async def _get_or_create_user_with_username(bot: Bot, user_id: int) -> dict:
@@ -178,10 +188,10 @@ async def cmd_admin(message: Message) -> None:
 async def admin_stats(callback: CallbackQuery) -> None:
     """Показывает статистику бота."""
     if not _is_admin(callback.from_user.id):
-        await callback.answer("⛔ Нет доступа", show_alert=True)
+        await safe_answer(callback, "⛔ Нет доступа", show_alert=True)
         return
 
-    await callback.answer()
+    await safe_answer(callback)
 
     total_users = await db.get_total_users()
     total_circles = await db.get_total_kruzhki()
@@ -223,10 +233,10 @@ async def admin_stats(callback: CallbackQuery) -> None:
 async def admin_delete_all_circles_confirm(callback: CallbackQuery) -> None:
     """Подтверждение удаления всех кружков."""
     if not _is_admin(callback.from_user.id):
-        await callback.answer("⛔ Нет доступа", show_alert=True)
+        await safe_answer(callback, "⛔ Нет доступа", show_alert=True)
         return
 
-    await callback.answer()
+    await safe_answer(callback)
 
     total = await db.get_total_kruzhki()
 
@@ -267,10 +277,10 @@ async def admin_delete_all_circles_confirm(callback: CallbackQuery) -> None:
 async def admin_delete_all_circles_execute(callback: CallbackQuery, bot: Bot) -> None:
     """Выполняет удаление всех кружков."""
     if not _is_admin(callback.from_user.id):
-        await callback.answer("⛔ Нет доступа", show_alert=True)
+        await safe_answer(callback, "⛔ Нет доступа", show_alert=True)
         return
 
-    await callback.answer("⏳ Удаление кружков...")
+    await safe_answer(callback, "⏳ Удаление кружков...")
 
     try:
         deleted = await db.delete_all_kruzhki()
@@ -315,10 +325,10 @@ async def admin_delete_all_circles_execute(callback: CallbackQuery, bot: Bot) ->
 async def admin_clear_ankets_confirm(callback: CallbackQuery) -> None:
     """Подтверждение очистки всех анкет."""
     if not _is_admin(callback.from_user.id):
-        await callback.answer("⛔ Нет доступа", show_alert=True)
+        await safe_answer(callback, "⛔ Нет доступа", show_alert=True)
         return
 
-    await callback.answer()
+    await safe_answer(callback)
 
     with_anketa = await db.get_with_anketa_count()
 
@@ -359,10 +369,10 @@ async def admin_clear_ankets_confirm(callback: CallbackQuery) -> None:
 async def admin_clear_ankets_execute(callback: CallbackQuery) -> None:
     """Выполняет удаление всех анкет."""
     if not _is_admin(callback.from_user.id):
-        await callback.answer("⛔ Нет доступа", show_alert=True)
+        await safe_answer(callback, "⛔ Нет доступа", show_alert=True)
         return
 
-    await callback.answer("⏳ Удаление анкет...")
+    await safe_answer(callback, "⏳ Удаление анкет...")
 
     try:
         deleted = await db.clear_all_ankets()
@@ -407,10 +417,10 @@ async def admin_clear_ankets_execute(callback: CallbackQuery) -> None:
 async def admin_users_list(callback: CallbackQuery) -> None:
     """Показывает список пользователей (первые 10)."""
     if not _is_admin(callback.from_user.id):
-        await callback.answer("⛔ Нет доступа", show_alert=True)
+        await safe_answer(callback, "⛔ Нет доступа", show_alert=True)
         return
 
-    await callback.answer()
+    await safe_answer(callback)
 
     users = await db.get_users_list(limit=10)
 
@@ -454,10 +464,10 @@ async def admin_back(callback: CallbackQuery) -> None:
     "⛔ У вас нет доступа". Теперь панель перерисовывается напрямую.
     """
     if not _is_admin(callback.from_user.id):
-        await callback.answer("⛔ Нет доступа", show_alert=True)
+        await safe_answer(callback, "⛔ Нет доступа", show_alert=True)
         return
 
-    await callback.answer()
+    await safe_answer(callback)
 
     try:
         await callback.message.edit_text(
@@ -477,10 +487,10 @@ async def admin_back(callback: CallbackQuery) -> None:
 async def admin_close(callback: CallbackQuery) -> None:
     """Закрывает панель администратора."""
     if not _is_admin(callback.from_user.id):
-        await callback.answer("⛔ Нет доступа", show_alert=True)
+        await safe_answer(callback, "⛔ Нет доступа", show_alert=True)
         return
 
-    await callback.answer()
+    await safe_answer(callback)
     try:
         await callback.message.delete()
     except Exception:
@@ -503,10 +513,10 @@ async def cmd_stats(message: Message) -> None:
 async def cb_stats_refresh(callback: CallbackQuery) -> None:
     """Обновление расширенной статистики."""
     if not _is_admin(callback.from_user.id):
-        await callback.answer("⛔ Нет доступа", show_alert=True)
+        await safe_answer(callback, "⛔ Нет доступа", show_alert=True)
         return
 
-    await callback.answer("Обновляю...")
+    await safe_answer(callback, "Обновляю...")
     text = await _build_stats_text()
     try:
         await callback.message.edit_text(
@@ -722,12 +732,12 @@ async def cmd_mask_style(message: Message) -> None:
 @router.callback_query(F.data.startswith("mask_"))
 async def cb_mask_style(callback: CallbackQuery) -> None:
     if not _is_admin(callback.from_user.id):
-        await callback.answer("Только для админов!", show_alert=True)
+        await safe_answer(callback, "Только для админов!", show_alert=True)
         return
 
     style = int(callback.data.split("_")[1])
     config.mask_style = style
-    await callback.answer("Стиль изменен на " + str(style) + "!")
+    await safe_answer(callback, "Стиль изменен на " + str(style) + "!")
     await callback.message.edit_text(
         "✅ Стиль маскировки изменен на " + str(style) + "!\n\n"
                                                         "0 - Полное имя\n"
@@ -1008,24 +1018,24 @@ async def cmd_circles(message: Message) -> None:
 async def cb_circles_page(callback: CallbackQuery) -> None:
     """Переключение страниц списка кружков."""
     if not _is_admin(callback.from_user.id):
-        await callback.answer("⛔ Нет доступа", show_alert=True)
+        await safe_answer(callback, "⛔ Нет доступа", show_alert=True)
         return
 
-    await callback.answer()
+    await safe_answer(callback)
     page = int(callback.data.split(":")[1])
     await _show_circles_page(callback.message, page)
 
 
 @router.callback_query(F.data == "acnoop")
 async def cb_circles_noop(callback: CallbackQuery) -> None:
-    await callback.answer()
+    await safe_answer(callback)
 
 
 @router.callback_query(F.data.startswith("acs:"))
 async def cb_circle_show(callback: CallbackQuery, bot: Bot) -> None:
     """Показать сам кружок админу."""
     if not _is_admin(callback.from_user.id):
-        await callback.answer("⛔ Нет доступа", show_alert=True)
+        await safe_answer(callback, "⛔ Нет доступа", show_alert=True)
         return
 
     _, kid_str, page_str = callback.data.split(":")
@@ -1033,11 +1043,11 @@ async def cb_circle_show(callback: CallbackQuery, bot: Bot) -> None:
 
     circle = await db.admin_get_circle(kid)
     if not circle:
-        await callback.answer("Кружок не найден (возможно, уже удалён)", show_alert=True)
+        await safe_answer(callback, "Кружок не найден (возможно, уже удалён)", show_alert=True)
         await _show_circles_page(callback.message, int(page_str))
         return
 
-    await callback.answer()
+    await safe_answer(callback)
 
     pin = circle.get("pin_order") or 0
     caption = (
@@ -1073,7 +1083,7 @@ async def cb_circle_show(callback: CallbackQuery, bot: Bot) -> None:
 async def cb_circle_delete_confirm(callback: CallbackQuery) -> None:
     """Подтверждение удаления одного кружка."""
     if not _is_admin(callback.from_user.id):
-        await callback.answer("⛔ Нет доступа", show_alert=True)
+        await safe_answer(callback, "⛔ Нет доступа", show_alert=True)
         return
 
     _, kid_str, page_str = callback.data.split(":")
@@ -1081,11 +1091,11 @@ async def cb_circle_delete_confirm(callback: CallbackQuery) -> None:
 
     circle = await db.admin_get_circle(kid)
     if not circle:
-        await callback.answer("Кружок не найден", show_alert=True)
+        await safe_answer(callback, "Кружок не найден", show_alert=True)
         await _show_circles_page(callback.message, int(page_str))
         return
 
-    await callback.answer()
+    await safe_answer(callback)
 
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
@@ -1114,7 +1124,7 @@ async def cb_circle_delete_confirm(callback: CallbackQuery) -> None:
 async def cb_circle_delete_execute(callback: CallbackQuery) -> None:
     """Удаление одного кружка."""
     if not _is_admin(callback.from_user.id):
-        await callback.answer("⛔ Нет доступа", show_alert=True)
+        await safe_answer(callback, "⛔ Нет доступа", show_alert=True)
         return
 
     _, kid_str, page_str = callback.data.split(":")
@@ -1122,10 +1132,10 @@ async def cb_circle_delete_execute(callback: CallbackQuery) -> None:
 
     deleted = await db.admin_delete_kruzhok(kid)
     if deleted:
-        await callback.answer(f"✅ Кружок #{kid} удалён", show_alert=True)
+        await safe_answer(callback, f"✅ Кружок #{kid} удалён", show_alert=True)
         logger.info("Админ %s удалил кружок #%s", callback.from_user.id, kid)
     else:
-        await callback.answer("Кружок не найден", show_alert=True)
+        await safe_answer(callback, "Кружок не найден", show_alert=True)
 
     await _show_circles_page(callback.message, int(page_str))
 
@@ -1134,14 +1144,14 @@ async def cb_circle_delete_execute(callback: CallbackQuery) -> None:
 async def cb_circle_unpin(callback: CallbackQuery) -> None:
     """Снять закрепление с кружка."""
     if not _is_admin(callback.from_user.id):
-        await callback.answer("⛔ Нет доступа", show_alert=True)
+        await safe_answer(callback, "⛔ Нет доступа", show_alert=True)
         return
 
     _, kid_str, page_str = callback.data.split(":")
     kid = int(kid_str)
 
     await db.admin_set_pin_order(kid, 0)
-    await callback.answer(f"📍 Кружок #{kid} откреплён")
+    await safe_answer(callback, f"📍 Кружок #{kid} откреплён")
     await _show_circles_page(callback.message, int(page_str))
 
 
@@ -1149,7 +1159,7 @@ async def cb_circle_unpin(callback: CallbackQuery) -> None:
 async def cb_circle_pin_ask(callback: CallbackQuery, state: FSMContext) -> None:
     """Спрашивает номер, под которым закрепить кружок."""
     if not _is_admin(callback.from_user.id):
-        await callback.answer("⛔ Нет доступа", show_alert=True)
+        await safe_answer(callback, "⛔ Нет доступа", show_alert=True)
         return
 
     _, kid_str, page_str = callback.data.split(":")
@@ -1157,10 +1167,10 @@ async def cb_circle_pin_ask(callback: CallbackQuery, state: FSMContext) -> None:
 
     circle = await db.admin_get_circle(kid)
     if not circle:
-        await callback.answer("Кружок не найден", show_alert=True)
+        await safe_answer(callback, "Кружок не найден", show_alert=True)
         return
 
-    await callback.answer()
+    await safe_answer(callback)
     await state.set_state(AdminCircleStates.waiting_pin_number)
     await state.update_data(pin_kruzhok_id=kid, pin_page=int(page_str))
 
@@ -1243,10 +1253,10 @@ async def process_pin_number(message: Message, state: FSMContext) -> None:
 async def cb_pinned_list(callback: CallbackQuery) -> None:
     """Список закреплённых кружков в порядке показа."""
     if not _is_admin(callback.from_user.id):
-        await callback.answer("⛔ Нет доступа", show_alert=True)
+        await safe_answer(callback, "⛔ Нет доступа", show_alert=True)
         return
 
-    await callback.answer()
+    await safe_answer(callback)
     pinned = await db.admin_get_pinned_circles()
 
     if not pinned:
@@ -1282,11 +1292,11 @@ async def cb_pinned_list(callback: CallbackQuery) -> None:
 async def cb_unpin_all(callback: CallbackQuery) -> None:
     """Снимает закрепление со всех кружков."""
     if not _is_admin(callback.from_user.id):
-        await callback.answer("⛔ Нет доступа", show_alert=True)
+        await safe_answer(callback, "⛔ Нет доступа", show_alert=True)
         return
 
     count = await db.admin_unpin_all()
-    await callback.answer(f"🧹 Откреплено кружков: {count}", show_alert=True)
+    await safe_answer(callback, f"🧹 Откреплено кружков: {count}", show_alert=True)
     await _show_circles_page(callback.message, 0)
 
 

@@ -27,6 +27,55 @@ def get_premium_emoji(emoji_id: str, fallback: str = "•") -> str:
     return fallback
 
 
+async def safe_edit(
+    callback: CallbackQuery,
+    text: str,
+    reply_markup: InlineKeyboardMarkup | None = None,
+) -> None:
+    """Безопасно перерисовывает сообщение задания.
+
+    Telegram отвечает ошибкой "message is not modified", если новый текст и
+    клавиатура полностью совпадают с текущими. Это штатная ситуация: например,
+    пользователь жмёт "Проверить", а статус задания не изменился. Раньше такая
+    ошибка валилась в лог трейсбеком - теперь просто игнорируется.
+
+    Если сообщение вообще нельзя отредактировать (слишком старое, удалено),
+    отправляем новое.
+    """
+    try:
+        await callback.message.edit_text(
+            text,
+            reply_markup=reply_markup,
+            parse_mode="HTML",
+        )
+    except TelegramBadRequest as e:
+        error = str(e).lower()
+        if "message is not modified" in error:
+            return
+        if "message to edit not found" in error or "message can't be edited" in error:
+            try:
+                await callback.message.answer(
+                    text, reply_markup=reply_markup, parse_mode="HTML"
+                )
+            except Exception as send_error:
+                logger.warning("Не удалось отправить сообщение задания: %s", send_error)
+            return
+        logger.warning("Ошибка редактирования сообщения задания: %s", e)
+
+
+async def safe_answer(callback: CallbackQuery, text: str = "", show_alert: bool = False) -> None:
+    """callback.answer(), который не падает на устаревшем callback query.
+
+    Telegram даёт всего ~15 секунд на ответ. Если хендлер отработал дольше
+    (медленный ответ рекламной сети, лимиты Telegram), прилетает
+    "query is too old" - для пользователя это уже ничего не значит.
+    """
+    try:
+        await callback.answer(text, show_alert=show_alert)
+    except TelegramBadRequest as e:
+        logger.debug("Не удалось ответить на callback: %s", e)
+
+
 # ========== ГЛАВНОЕ МЕНЮ ЗАДАНИЙ ==========
 
 @router.message(F.text == "🎯 Задания")
@@ -142,19 +191,8 @@ async def task_sponsor(callback: CallbackQuery, bot: Bot) -> None:
         InlineKeyboardButton(text="« Назад", callback_data="back_to_tasks")
     ])
 
-    try:
-        await callback.message.edit_text(
-            text,
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
-            parse_mode="HTML"
-        )
-    except TelegramBadRequest as e:
-        # Telegram запрещает редактировать сообщение на идентичный контент -
-        # это нормальная ситуация (например, повторное нажатие "Проверить"
-        # без изменений статуса), просто игнорируем.
-        if "message is not modified" not in str(e):
-            raise
-    await callback.answer()
+    await safe_edit(callback, text, InlineKeyboardMarkup(inline_keyboard=buttons))
+    await safe_answer(callback)
 
 
 @router.callback_query(F.data == "check_sponsor")
@@ -187,9 +225,9 @@ async def check_sponsor(callback: CallbackQuery, bot: Bot) -> None:
             )
 
     if new_subscriptions > 0:
-        await callback.answer(f"✅ Получено {new_subscriptions} монет!", show_alert=True)
+        await safe_answer(callback, f"✅ Получено {new_subscriptions} монет!", show_alert=True)
     else:
-        await callback.answer("Новых подписок не найдено", show_alert=True)
+        await safe_answer(callback, "Новых подписок не найдено", show_alert=True)
 
     await task_sponsor(callback, bot)
 
@@ -225,12 +263,8 @@ async def task_ref_bio(callback: CallbackQuery, bot: Bot) -> None:
         ]
     )
 
-    await callback.message.edit_text(
-        text,
-        reply_markup=keyboard,
-        parse_mode="HTML"
-    )
-    await callback.answer()
+    await safe_edit(callback, text, keyboard)
+    await safe_answer(callback)
 
 
 @router.callback_query(F.data == "check_ref_bio")
@@ -249,13 +283,13 @@ async def check_ref_bio(callback: CallbackQuery, bot: Bot) -> None:
             if not await db.is_ref_bio_rewarded(user_id):
                 await db.set_ref_bio_rewarded(user_id)
                 await db.add_coins(user_id, 5)
-                await callback.answer("✅ Ссылка найдена! +5 монет!", show_alert=True)
+                await safe_answer(callback, "✅ Ссылка найдена! +5 монет!", show_alert=True)
             else:
-                await callback.answer("✅ Уже проверено!", show_alert=True)
+                await safe_answer(callback, "✅ Уже проверено!", show_alert=True)
         else:
-            await callback.answer("❌ Ссылка не найдена", show_alert=True)
+            await safe_answer(callback, "❌ Ссылка не найдена", show_alert=True)
     except Exception as e:
-        await callback.answer("❌ Ошибка проверки", show_alert=True)
+        await safe_answer(callback, "❌ Ошибка проверки", show_alert=True)
 
     await task_ref_bio(callback, bot)
 
@@ -293,12 +327,8 @@ async def task_invite(callback: CallbackQuery, bot: Bot) -> None:
         ]
     )
 
-    await callback.message.edit_text(
-        text,
-        reply_markup=keyboard,
-        parse_mode="HTML"
-    )
-    await callback.answer()
+    await safe_edit(callback, text, keyboard)
+    await safe_answer(callback)
 
 
 # ========== ЗАДАНИЕ 4: 3 ДНЯ ПОДРЯД ==========
@@ -331,12 +361,8 @@ async def task_streak(callback: CallbackQuery, bot: Bot) -> None:
         ]
     )
 
-    await callback.message.edit_text(
-        text,
-        reply_markup=keyboard,
-        parse_mode="HTML"
-    )
-    await callback.answer()
+    await safe_edit(callback, text, keyboard)
+    await safe_answer(callback)
 
 
 @router.callback_query(F.data == "check_streak")
@@ -349,11 +375,11 @@ async def check_streak(callback: CallbackQuery, bot: Bot) -> None:
     if is_done and not await db.is_streak_rewarded(user_id):
         await db.set_streak_rewarded(user_id)
         await db.add_coins(user_id, 10)
-        await callback.answer("🎁 +10 монет!", show_alert=True)
+        await safe_answer(callback, "🎁 +10 монет!", show_alert=True)
     elif is_done:
-        await callback.answer("✅ Уже выполнено!", show_alert=True)
+        await safe_answer(callback, "✅ Уже выполнено!", show_alert=True)
     else:
-        await callback.answer(f"⏳ {streak_days}/3", show_alert=True)
+        await safe_answer(callback, f"⏳ {streak_days}/3", show_alert=True)
 
     await task_streak(callback, bot)
 
@@ -363,8 +389,11 @@ async def check_streak(callback: CallbackQuery, bot: Bot) -> None:
 @router.callback_query(F.data == "back_to_tasks")
 async def back_to_tasks(callback: CallbackQuery) -> None:
     """Вернуться к списку заданий."""
-    await callback.answer()
-    await callback.message.delete()
+    await safe_answer(callback)
+    try:
+        await callback.message.delete()
+    except Exception:
+        pass
 
     class FakeMessage:
         def __init__(self, chat_id, from_user):

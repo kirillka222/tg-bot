@@ -24,6 +24,22 @@ logger = logging.getLogger(__name__)
 router = Router(name="browse")
 
 
+async def safe_answer(
+    callback: CallbackQuery, text: str = "", show_alert: bool = False
+) -> None:
+    """callback.answer(), который не падает на устаревшем callback query.
+
+    У Telegram есть ~15 секунд на ответ. Если хендлер отработал дольше
+    (медленный ответ рекламной сети, флуд-лимиты при отправке уведомлений),
+    прилетает "query is too old" - для пользователя это уже неважно,
+    поэтому просто пишем в debug-лог вместо трейсбека.
+    """
+    try:
+        await callback.answer(text, show_alert=show_alert)
+    except Exception as e:
+        logger.debug("Не удалось ответить на callback: %s", e)
+
+
 def mask_name(name: str) -> str:
     if not name:
         return "Аноним"
@@ -820,7 +836,7 @@ async def cmd_browse_anketas(message: Message, bot: Bot) -> None:
 
 @router.callback_query(F.data == "next_kruzhok")
 async def cb_next_kruzhok(callback: CallbackQuery, bot: Bot) -> None:
-    await callback.answer()
+    await safe_answer(callback)
     await _next_kruzhok_no_delay(
         callback.from_user.id, bot, callback.message.chat.id, user=callback.from_user
     )
@@ -828,7 +844,7 @@ async def cb_next_kruzhok(callback: CallbackQuery, bot: Bot) -> None:
 
 @router.callback_query(F.data.startswith("next_anketa_"))
 async def cb_next_anketa(callback: CallbackQuery, bot: Bot) -> None:
-    await callback.answer()
+    await safe_answer(callback)
     target_id = int(callback.data.split("_")[2])
     viewer_id = callback.from_user.id
     await db.anketa_mark_viewed(viewer_id, target_id)
@@ -837,7 +853,7 @@ async def cb_next_anketa(callback: CallbackQuery, bot: Bot) -> None:
 
 @router.callback_query(F.data == "start_browsing_from_notification")
 async def cb_start_browsing_from_notification(callback: CallbackQuery, bot: Bot) -> None:
-    await callback.answer()
+    await safe_answer(callback)
     try:
         await callback.message.delete()
     except Exception:
@@ -849,21 +865,21 @@ async def cb_start_browsing_from_notification(callback: CallbackQuery, bot: Bot)
 
 @router.callback_query(F.data == "go_shop")
 async def cb_go_shop(callback: CallbackQuery) -> None:
-    await callback.answer()
+    await safe_answer(callback)
     from handlers.shop import show_shop
     await show_shop(callback.message)
 
 
 @router.callback_query(F.data == "go_tasks")
 async def cb_go_tasks(callback: CallbackQuery) -> None:
-    await callback.answer()
+    await safe_answer(callback)
     from handlers.tasks import show_tasks
     await show_tasks(callback.message)
 
 
 @router.callback_query(F.data == "retry_browse")
 async def cb_retry_browse(callback: CallbackQuery, bot: Bot) -> None:
-    await callback.answer()
+    await safe_answer(callback)
     try:
         await callback.message.delete()
     except Exception:
@@ -873,6 +889,10 @@ async def cb_retry_browse(callback: CallbackQuery, bot: Bot) -> None:
 
 @router.callback_query(F.data == "check_subscription")
 async def cb_check_subscription(callback: CallbackQuery, bot: Bot) -> None:
+    # Отвечаем сразу: проверка подписки на несколько каналов может занять
+    # секунды, а Telegram ждёт ответа на callback ограниченное время.
+    await safe_answer(callback, "Проверяю...")
+
     user_id = callback.from_user.id
     all_subscribed = True
     not_subscribed = []
@@ -947,13 +967,11 @@ async def cb_check_subscription(callback: CallbackQuery, bot: Bot) -> None:
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons)
             )
 
-    await callback.answer()
-
 
 @router.callback_query(F.data == "subgram_check")
 async def cb_subgram_check(callback: CallbackQuery, bot: Bot) -> None:
     """Юзер нажал 'Я подписался' на рекламу SubGram - перепроверяем."""
-    await callback.answer("Проверяю...")
+    await safe_answer(callback, "Проверяю...")
     user_id = callback.from_user.id
     chat_id = callback.message.chat.id
 
@@ -1003,7 +1021,7 @@ async def cb_subgram_check(callback: CallbackQuery, bot: Bot) -> None:
 @router.callback_query(F.data == "botohub_check")
 async def cb_botohub_check(callback: CallbackQuery, bot: Bot) -> None:
     """Юзер нажал 'Я подписался' на рекламу BotoHub - перепроверяем."""
-    await callback.answer("Проверяю...")
+    await safe_answer(callback, "Проверяю...")
     user_id = callback.from_user.id
     chat_id = callback.message.chat.id
 
@@ -1042,7 +1060,7 @@ async def cb_botohub_check(callback: CallbackQuery, bot: Bot) -> None:
 
 @router.callback_query(F.data == "already_subscribed")
 async def cb_already_subscribed(callback: CallbackQuery) -> None:
-    await callback.answer("Вы уже подписаны на этот канал!")
+    await safe_answer(callback, "Вы уже подписаны на этот канал!")
 
 
 @router.callback_query(F.data == "gate_recheck")
@@ -1052,7 +1070,7 @@ async def cb_gate_recheck(callback: CallbackQuery, bot: Bot) -> None:
     Работает для любого источника ОП (Flyer / SubGram / BotoHub / свои каналы)
     и служит запасным выходом, чтобы пользователь не мог зависнуть в блокировке.
     """
-    await callback.answer("Проверяю...")
+    await safe_answer(callback, "Проверяю...")
     user_id = callback.from_user.id
     chat_id = callback.message.chat.id
 
@@ -1078,7 +1096,8 @@ async def cb_disable_ads(callback: CallbackQuery, bot: Bot) -> None:
 
     balance = await db.get_balance(user_id)
     if balance < cost:
-        await callback.answer(
+        await safe_answer(
+            callback,
             "Недостаточно монет! Нужно " + str(cost) + " монет.\n"
                                                        "Ваш баланс: " + str(balance),
             show_alert=True
@@ -1086,7 +1105,7 @@ async def cb_disable_ads(callback: CallbackQuery, bot: Bot) -> None:
         return
 
     if not await db.try_charge(user_id, cost):
-        await callback.answer("Ошибка списания монет!", show_alert=True)
+        await safe_answer(callback, "Ошибка списания монет!", show_alert=True)
         return
 
     until = int(time.time()) + 86400
@@ -1094,7 +1113,7 @@ async def cb_disable_ads(callback: CallbackQuery, bot: Bot) -> None:
     # Реклама отключена - снимаем блокировку обязательной подписки
     await db.gate_clear_pending(user_id)
 
-    await callback.answer("Реклама отключена на 1 день!", show_alert=True)
+    await safe_answer(callback, "Реклама отключена на 1 день!", show_alert=True)
     try:
         await callback.message.delete()
     except Exception:
@@ -1120,7 +1139,8 @@ async def cb_buy_pack(callback: CallbackQuery, bot: Bot) -> None:
 
     balance = await db.get_balance(buyer_id)
     if balance < cost:
-        await callback.answer(
+        await safe_answer(
+            callback,
             f"❌ Недостаточно монет! Нужно {cost} монет.\n"
             f"💰 Твой баланс: {balance}",
             show_alert=True
@@ -1128,13 +1148,13 @@ async def cb_buy_pack(callback: CallbackQuery, bot: Bot) -> None:
         return
 
     if not await db.try_charge(buyer_id, cost):
-        await callback.answer("❌ Ошибка списания монет!", show_alert=True)
+        await safe_answer(callback, "❌ Ошибка списания монет!", show_alert=True)
         return
 
     await db.unlock_circles(buyer_id, target_id)
     await db.anketa_mark_viewed(buyer_id, target_id)
 
-    await callback.answer("✅ Доступ к кружкам пользователя открыт!", show_alert=True)
+    await safe_answer(callback, "✅ Доступ к кружкам пользователя открыт!", show_alert=True)
 
     await callback.message.answer(
         "✅ <b>Доступ к кружкам пользователя открыт!</b>\n\n"
@@ -1148,11 +1168,48 @@ async def cb_buy_pack(callback: CallbackQuery, bot: Bot) -> None:
 
 # ===== ЛАЙКИ/ДИЗЛАЙКИ =====
 
+async def _notify_like_owner(bot: Bot, kruzhok_id: int, viewer_id: int) -> None:
+    """Фоновая задача: наградить (если включено) и уведомить владельца кружка.
+
+    Вынесена в фон, потому что отправка сообщения владельцу может упереться
+    во флуд-лимиты Telegram и занять секунды. Раньше пользователь всё это время
+    ждал ответа на нажатие, а callback успевал протухнуть
+    ("query is too old and response timeout expired").
+    """
+    try:
+        owner_id = await _find_owner(kruzhok_id)
+        if not owner_id or owner_id == viewer_id:
+            return
+
+        # Монеты за лайк по умолчанию НЕ начисляются (LIKE_REWARD=0 в .env).
+        # Если захочешь вернуть награду - поставь LIKE_REWARD=5.
+        reward = max(0, config.like_reward)
+        if reward:
+            await db.add_coins(owner_id, reward)
+
+        if not config.like_notify:
+            return
+
+        text = "❤️ Кто-то поставил лайк на твой кружок!"
+        if reward:
+            text += f" +{reward} монет"
+
+        try:
+            await bot.send_message(owner_id, text)
+        except Exception as e:
+            logger.debug("Не удалось уведомить владельца %s о лайке: %s", owner_id, e)
+    except Exception as e:
+        logger.error("Ошибка в фоновой задаче уведомления о лайке: %s", e)
+
+
 @router.callback_query(F.data.startswith("like:") | F.data.startswith("dislike:"))
 async def cb_reaction(callback: CallbackQuery, bot: Bot) -> None:
     reaction_type, kruzhok_id_str = callback.data.split(":")
     kruzhok_id = int(kruzhok_id_str)
     reaction = "like" if reaction_type == "like" else "dislike"
+
+    # Отвечаем СРАЗУ: у Telegram жёсткий таймаут на ответ по callback query.
+    await safe_answer(callback, "Лайк!" if reaction == "like" else "Дизлайк!")
 
     # is_new = True только если реакция реально изменилась. Раньше уведомление
     # владельцу уходило на КАЖДОЕ нажатие - отсюда и был спам "+5 монет".
@@ -1162,27 +1219,13 @@ async def cb_reaction(callback: CallbackQuery, bot: Bot) -> None:
     try:
         await callback.message.edit_reply_markup(reply_markup=kb)
     except Exception:
+        # "message is not modified" и прочее - счётчик не изменился, это норма
         pass
 
     if reaction == "like" and is_new:
-        owner_id = await _find_owner(kruzhok_id)
-        if owner_id and owner_id != callback.from_user.id:
-            # Монеты за лайк по умолчанию НЕ начисляются (LIKE_REWARD=0 в .env).
-            # Если захочешь вернуть награду - поставь LIKE_REWARD=5.
-            reward = max(0, config.like_reward)
-            if reward:
-                await db.add_coins(owner_id, reward)
-
-            if config.like_notify:
-                text = "❤️ Кто-то поставил лайк на твой кружок!"
-                if reward:
-                    text += f" +{reward} монет"
-                try:
-                    await bot.send_message(owner_id, text)
-                except Exception:
-                    pass
-
-    await callback.answer("Лайк!" if reaction == "like" else "Дизлайк!")
+        asyncio.create_task(
+            _notify_like_owner(bot, kruzhok_id, callback.from_user.id)
+        )
 
 
 # ===== УЗНАТЬ АВТОРА (50 МОНЕТ) С ПОДТВЕРЖДЕНИЕМ =====
@@ -1195,7 +1238,7 @@ async def cb_reveal_author(callback: CallbackQuery, bot: Bot) -> None:
 
     owner_id = await _find_owner(kruzhok_id)
     if owner_id is None:
-        await callback.answer("Кружок не найден.", show_alert=True)
+        await safe_answer(callback, "Кружок не найден.", show_alert=True)
         return
 
     # Проверяем, не раскрывал ли уже
@@ -1204,23 +1247,26 @@ async def cb_reveal_author(callback: CallbackQuery, bot: Bot) -> None:
         if owner:
             username = owner.get('username')
             if username:
-                await callback.answer(
+                await safe_answer(
+            callback,
                     f"👤 Контакт автора: @{username}",
                     show_alert=True
                 )
             else:
-                await callback.answer(
+                await safe_answer(
+            callback,
                     f"❌ У автора не задан username",
                     show_alert=True
                 )
         else:
-            await callback.answer("Автор не найден", show_alert=True)
+            await safe_answer(callback, "Автор не найден", show_alert=True)
         return
 
     # Проверяем баланс
     balance = await db.get_balance(viewer_id)
     if balance < cost:
-        await callback.answer(
+        await safe_answer(
+            callback,
             f"❌ Недостаточно монет! Нужно {cost} монет.\n"
             f"💰 Твой баланс: {balance}",
             show_alert=True
@@ -1251,7 +1297,7 @@ async def cb_reveal_author(callback: CallbackQuery, bot: Bot) -> None:
         reply_markup=keyboard,
         parse_mode="HTML"
     )
-    await callback.answer()
+    await safe_answer(callback)
 
 
 @router.callback_query(F.data.startswith("confirm_reveal:"))
@@ -1262,13 +1308,14 @@ async def cb_confirm_reveal(callback: CallbackQuery, bot: Bot) -> None:
 
     owner_id = await _find_owner(kruzhok_id)
     if owner_id is None:
-        await callback.answer("Кружок не найден.", show_alert=True)
+        await safe_answer(callback, "Кружок не найден.", show_alert=True)
         return
 
     # Проверяем баланс
     balance = await db.get_balance(viewer_id)
     if balance < cost:
-        await callback.answer(
+        await safe_answer(
+            callback,
             f"❌ Недостаточно монет! Нужно {cost} монет.\n"
             f"💰 Твой баланс: {balance}",
             show_alert=True
@@ -1277,7 +1324,7 @@ async def cb_confirm_reveal(callback: CallbackQuery, bot: Bot) -> None:
 
     # Списываем монеты
     if not await db.try_charge(viewer_id, cost):
-        await callback.answer("❌ Ошибка списания монет!", show_alert=True)
+        await safe_answer(callback, "❌ Ошибка списания монет!", show_alert=True)
         return
 
     # Записываем, что пользователь раскрыл автора
@@ -1299,18 +1346,20 @@ async def cb_confirm_reveal(callback: CallbackQuery, bot: Bot) -> None:
                 f"{emoji_coin} Снято {cost} монет",
                 parse_mode="HTML"
             )
-            await callback.answer(
+            await safe_answer(
+            callback,
                 f"✅ Контакт автора: @{username}",
                 show_alert=True
             )
         else:
-            await callback.answer(
+            await safe_answer(
+            callback,
                 f"❌ У автора не задан username\n"
                 f"ID: {owner_id}",
                 show_alert=True
             )
     else:
-        await callback.answer("Автор не найден", show_alert=True)
+        await safe_answer(callback, "Автор не найден", show_alert=True)
 
     # Удаляем сообщение с подтверждением
     try:
@@ -1328,7 +1377,7 @@ async def cb_more_from_owner(callback: CallbackQuery, bot: Bot) -> None:
     owner_id = await _find_owner(kruzhok_id)
 
     if owner_id is None:
-        await callback.answer("Не найдено.", show_alert=True)
+        await safe_answer(callback, "Не найдено.", show_alert=True)
         return
 
     # Проверяем, купил ли пользователь доступ к кружкам этого автора
@@ -1356,16 +1405,16 @@ async def cb_more_from_owner(callback: CallbackQuery, bot: Bot) -> None:
             reply_markup=keyboard,
             parse_mode="HTML"
         )
-        await callback.answer()
+        await safe_answer(callback)
         return
 
     # Если доступ уже куплен - показываем кружки
     others = await db.get_other_kruzhki_by_owner(owner_id, kruzhok_id)
     if not others:
-        await callback.answer("У этого пользователя пока нет других кружков.", show_alert=True)
+        await safe_answer(callback, "У этого пользователя пока нет других кружков.", show_alert=True)
         return
 
-    await callback.answer()
+    await safe_answer(callback)
     next_one = others[0]
     kb = await _kruzhok_kb(next_one["kruzhok_id"])
 
@@ -1387,7 +1436,7 @@ async def cb_more_from_owner(callback: CallbackQuery, bot: Bot) -> None:
 @router.callback_query(F.data.startswith("anketa_like:"))
 async def cb_anketa_like(callback: CallbackQuery, bot: Bot) -> None:
     target_id = int(callback.data.split(":")[1])
-    await callback.answer("Отправлено!")
+    await safe_answer(callback, "Отправлено!")
     try:
         await bot.send_message(target_id, "Кому-то понравилась твоя анкета!")
     except Exception:

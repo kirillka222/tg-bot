@@ -27570,3 +27570,391 @@ aiogram.exceptions.TelegramBadRequest: Telegram server says - Bad Request: messa
 2026-08-20 16:04:56 [INFO] aiogram.event: Update id=486773965 is handled. Duration 211 ms by bot id=8830460693
 2026-08-20 16:04:57 [INFO] aiogram.event: Update id=486773966 is handled. Duration 207 ms by bot id=8830460693
 2026-08-20 16:06:12 [INFO] aiogram.event: Update id=486773967 is handled. Duration 329 ms by bot id=8830460693
+2026-08-20 16:27:12 [INFO] aiogram.event: Update id=486773968 is handled. Duration 690 ms by bot id=8830460693
+2026-08-20 16:27:14 [INFO] aiogram.event: Update id=486773969 is handled. Duration 588 ms by bot id=8830460693
+2026-08-20 16:28:00 [INFO] aiogram.event: Update id=486773970 is handled. Duration 2229 ms by bot id=8830460693
+2026-08-20 16:28:05 [INFO] aiogram.event: Update id=486773971 is handled. Duration 779 ms by bot id=8830460693
+2026-08-20 16:28:10 [INFO] aiogram.event: Update id=486773972 is handled. Duration 258 ms by bot id=8830460693
+2026-08-20 16:28:13 [INFO] aiogram.event: Update id=486773973 is handled. Duration 430 ms by bot id=8830460693
+2026-08-20 16:28:16 [INFO] aiogram.event: Update id=486773974 is handled. Duration 804 ms by bot id=8830460693
+2026-08-20 16:28:18 [INFO] aiogram.event: Update id=486773975 is handled. Duration 622 ms by bot id=8830460693
+2026-08-20 16:28:21 [INFO] aiogram.event: Update id=486773976 is handled. Duration 455 ms by bot id=8830460693
+2026-08-20 16:28:35 [ERROR] logging_middleware: ❌ Ошибка при обработке апдейта: Telegram server says - Bad Request: message is not modified: specified new message content and reply markup are exactly the same as a current content and reply markup of the message
+Traceback (most recent call last):
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/logging_middleware.py", line 158, in __call__
+    result = await handler(event, data)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/logging_middleware.py", line 35, in __call__
+    return await handler(event, data)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/logging_middleware.py", line 120, in __call__
+    return await handler(event, data)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/dispatcher/event/telegram.py", line 126, in trigger
+    return await wrapped_inner(event, kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/dispatcher/event/handler.py", line 71, in call
+    return await wrapped()
+           ^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/dispatcher/dispatcher.py", line 283, in _listen_update
+    return await self.propagate_event(update_type=update_type, event=event, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/dispatcher/router.py", line 167, in propagate_event
+    return await observer.wrap_outer_middleware(_wrapped, event=event, data=kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/dispatcher/router.py", line 159, in _wrapped
+    return await self._propagate_event(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/dispatcher/router.py", line 195, in _propagate_event
+    response = await router.propagate_event(update_type=update_type, event=event, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/dispatcher/router.py", line 167, in propagate_event
+    return await observer.wrap_outer_middleware(_wrapped, event=event, data=kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/dispatcher/router.py", line 159, in _wrapped
+    return await self._propagate_event(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/dispatcher/router.py", line 187, in _propagate_event
+    response = await observer.trigger(event, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/dispatcher/event/telegram.py", line 126, in trigger
+    return await wrapped_inner(event, kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/dispatcher/event/handler.py", line 71, in call
+    return await wrapped()
+           ^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/handlers/tasks.py", line 260, in check_ref_bio
+    await task_ref_bio(callback, bot)
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/handlers/tasks.py", line 228, in task_ref_bio
+    await callback.message.edit_text(
+    ...<3 lines>...
+    )
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/methods/base.py", line 82, in emit
+    return await bot(self)
+           ^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/client/bot.py", line 514, in __call__
+    return await self.session(self, method, timeout=request_timeout)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/client/session/base.py", line 259, in __call__
+    return cast(TelegramType, await middleware(bot, method))
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/client/session/aiohttp.py", line 177, in make_request
+    response = self.check_response(
+        bot=bot,
+    ...<2 lines>...
+        content=raw_result,
+    )
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/client/session/base.py", line 121, in check_response
+    raise TelegramBadRequest(method=method, message=description)
+aiogram.exceptions.TelegramBadRequest: Telegram server says - Bad Request: message is not modified: specified new message content and reply markup are exactly the same as a current content and reply markup of the message
+2026-08-20 16:28:35 [INFO] aiogram.event: Update id=486773977 is not handled. Duration 652 ms by bot id=8830460693
+2026-08-20 16:28:35 [ERROR] aiogram.event: Cause exception while process update id=486773977 by bot id=8830460693
+TelegramBadRequest: Telegram server says - Bad Request: message is not modified: specified new message content and reply markup are exactly the same as a current content and reply markup of the message
+Traceback (most recent call last):
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/dispatcher/dispatcher.py", line 320, in _process_update
+    response = await self.feed_update(bot, update, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/dispatcher/dispatcher.py", line 164, in feed_update
+    response = await self.update.wrap_outer_middleware(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<7 lines>...
+    )
+    ^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/dispatcher/middlewares/error.py", line 27, in __call__
+    return await handler(event, data)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/dispatcher/middlewares/user_context.py", line 58, in __call__
+    return await handler(event, data)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/fsm/middleware.py", line 43, in __call__
+    return await handler(event, data)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/logging_middleware.py", line 158, in __call__
+    result = await handler(event, data)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/logging_middleware.py", line 35, in __call__
+    return await handler(event, data)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/logging_middleware.py", line 120, in __call__
+    return await handler(event, data)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/dispatcher/event/telegram.py", line 126, in trigger
+    return await wrapped_inner(event, kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/dispatcher/event/handler.py", line 71, in call
+    return await wrapped()
+           ^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/dispatcher/dispatcher.py", line 283, in _listen_update
+    return await self.propagate_event(update_type=update_type, event=event, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/dispatcher/router.py", line 167, in propagate_event
+    return await observer.wrap_outer_middleware(_wrapped, event=event, data=kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/dispatcher/router.py", line 159, in _wrapped
+    return await self._propagate_event(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/dispatcher/router.py", line 195, in _propagate_event
+    response = await router.propagate_event(update_type=update_type, event=event, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/dispatcher/router.py", line 167, in propagate_event
+    return await observer.wrap_outer_middleware(_wrapped, event=event, data=kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/dispatcher/router.py", line 159, in _wrapped
+    return await self._propagate_event(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/dispatcher/router.py", line 187, in _propagate_event
+    response = await observer.trigger(event, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/dispatcher/event/telegram.py", line 126, in trigger
+    return await wrapped_inner(event, kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/dispatcher/event/handler.py", line 71, in call
+    return await wrapped()
+           ^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/handlers/tasks.py", line 260, in check_ref_bio
+    await task_ref_bio(callback, bot)
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/handlers/tasks.py", line 228, in task_ref_bio
+    await callback.message.edit_text(
+    ...<3 lines>...
+    )
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/methods/base.py", line 82, in emit
+    return await bot(self)
+           ^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/client/bot.py", line 514, in __call__
+    return await self.session(self, method, timeout=request_timeout)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/client/session/base.py", line 259, in __call__
+    return cast(TelegramType, await middleware(bot, method))
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/client/session/aiohttp.py", line 177, in make_request
+    response = self.check_response(
+        bot=bot,
+    ...<2 lines>...
+        content=raw_result,
+    )
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/client/session/base.py", line 121, in check_response
+    raise TelegramBadRequest(method=method, message=description)
+aiogram.exceptions.TelegramBadRequest: Telegram server says - Bad Request: message is not modified: specified new message content and reply markup are exactly the same as a current content and reply markup of the message
+2026-08-20 16:29:33 [INFO] aiogram.event: Update id=486773978 is handled. Duration 1076 ms by bot id=8830460693
+2026-08-20 16:29:35 [INFO] aiogram.event: Update id=486773979 is handled. Duration 614 ms by bot id=8830460693
+2026-08-20 16:29:37 [INFO] aiogram.event: Update id=486773980 is handled. Duration 463 ms by bot id=8830460693
+2026-08-20 16:29:53 [INFO] aiogram.event: Update id=486773981 is handled. Duration 576 ms by bot id=8830460693
+2026-08-20 16:29:55 [INFO] aiogram.event: Update id=486773982 is handled. Duration 234 ms by bot id=8830460693
+2026-08-20 16:30:04 [INFO] aiogram.event: Update id=486773983 is handled. Duration 607 ms by bot id=8830460693
+2026-08-20 16:30:08 [INFO] aiogram.event: Update id=486773984 is handled. Duration 315 ms by bot id=8830460693
+2026-08-20 16:30:12 [INFO] aiogram.event: Update id=486773985 is handled. Duration 228 ms by bot id=8830460693
+2026-08-20 16:31:37 [INFO] aiogram.event: Update id=486773986 is handled. Duration 797 ms by bot id=8830460693
+2026-08-20 16:31:48 [INFO] aiogram.event: Update id=486773987 is handled. Duration 627 ms by bot id=8830460693
+2026-08-20 16:31:59 [INFO] aiogram.event: Update id=486773988 is handled. Duration 854 ms by bot id=8830460693
+2026-08-20 16:32:10 [INFO] aiogram.event: Update id=486773989 is handled. Duration 597 ms by bot id=8830460693
+2026-08-20 16:33:41 [INFO] aiogram.event: Update id=486773990 is handled. Duration 2359 ms by bot id=8830460693
+2026-08-20 16:33:44 [INFO] aiogram.event: Update id=486773991 is handled. Duration 826 ms by bot id=8830460693
+2026-08-20 16:33:47 [INFO] aiogram.event: Update id=486773992 is handled. Duration 692 ms by bot id=8830460693
+2026-08-20 16:33:50 [INFO] logging_middleware: Апдейт от 8301524141 заблокирован обязательной подпиской
+2026-08-20 16:33:50 [INFO] aiogram.event: Update id=486773993 is handled. Duration 208 ms by bot id=8830460693
+2026-08-20 16:33:55 [INFO] aiogram.event: Update id=486773994 is handled. Duration 1188 ms by bot id=8830460693
+2026-08-20 16:34:30 [INFO] aiogram.event: Update id=486773995 is handled. Duration 1719 ms by bot id=8830460693
+2026-08-20 16:36:05 [INFO] aiogram.event: Update id=486773996 is handled. Duration 1299 ms by bot id=8830460693
+2026-08-20 16:36:11 [INFO] aiogram.event: Update id=486773997 is handled. Duration 605 ms by bot id=8830460693
+2026-08-20 16:36:13 [INFO] aiogram.event: Update id=486773998 is handled. Duration 640 ms by bot id=8830460693
+2026-08-20 16:36:19 [INFO] aiogram.event: Update id=486773999 is handled. Duration 904 ms by bot id=8830460693
+2026-08-20 16:36:24 [INFO] aiogram.event: Update id=486774000 is handled. Duration 603 ms by bot id=8830460693
+2026-08-20 16:36:26 [INFO] aiogram.event: Update id=486774001 is handled. Duration 834 ms by bot id=8830460693
+2026-08-20 16:36:38 [INFO] aiogram.event: Update id=486774002 is handled. Duration 635 ms by bot id=8830460693
+2026-08-20 16:37:22 [INFO] aiogram.event: Update id=486774003 is handled. Duration 1245 ms by bot id=8830460693
+2026-08-20 16:37:29 [INFO] aiogram.event: Update id=486774004 is handled. Duration 601 ms by bot id=8830460693
+2026-08-20 16:38:21 [INFO] aiogram.event: Update id=486774005 is handled. Duration 315 ms by bot id=8830460693
+2026-08-20 16:38:24 [INFO] aiogram.event: Update id=486774006 is handled. Duration 814 ms by bot id=8830460693
+2026-08-20 16:38:37 [INFO] aiogram.event: Update id=486774007 is handled. Duration 594 ms by bot id=8830460693
+2026-08-20 16:38:42 [INFO] aiogram.event: Update id=486774008 is handled. Duration 824 ms by bot id=8830460693
+2026-08-20 16:39:02 [INFO] aiogram.event: Update id=486774010 is handled. Duration 683 ms by bot id=8830460693
+2026-08-20 16:39:04 [INFO] aiogram.event: Update id=486774009 is handled. Duration 4374 ms by bot id=8830460693
+2026-08-20 16:39:10 [INFO] logging_middleware: Апдейт от 1124409797 заблокирован обязательной подпиской
+2026-08-20 16:39:10 [INFO] aiogram.event: Update id=486774011 is handled. Duration 212 ms by bot id=8830460693
+2026-08-20 16:39:15 [INFO] aiogram.event: Update id=486774012 is handled. Duration 3499 ms by bot id=8830460693
+2026-08-20 16:39:40 [INFO] aiogram.event: Update id=486774013 is handled. Duration 1056 ms by bot id=8830460693
+2026-08-20 16:39:47 [INFO] aiogram.event: Update id=486774014 is handled. Duration 1469 ms by bot id=8830460693
+2026-08-20 16:40:02 [INFO] aiogram.event: Update id=486774015 is handled. Duration 923 ms by bot id=8830460693
+2026-08-20 16:40:06 [INFO] aiogram.event: Update id=486774016 is handled. Duration 858 ms by bot id=8830460693
+2026-08-20 16:40:33 [INFO] aiogram.event: Update id=486774017 is handled. Duration 802 ms by bot id=8830460693
+2026-08-20 16:40:34 [INFO] aiogram.event: Update id=486774018 is handled. Duration 830 ms by bot id=8830460693
+2026-08-20 16:41:06 [INFO] aiogram.event: Update id=486774020 is handled. Duration 2442 ms by bot id=8830460693
+2026-08-20 16:41:21 [ERROR] logging_middleware: ❌ Ошибка при обработке апдейта: Telegram server says - Bad Request: query is too old and response timeout expired or query ID is invalid
+Traceback (most recent call last):
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/logging_middleware.py", line 158, in __call__
+    result = await handler(event, data)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/logging_middleware.py", line 35, in __call__
+    return await handler(event, data)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/logging_middleware.py", line 120, in __call__
+    return await handler(event, data)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/dispatcher/event/telegram.py", line 126, in trigger
+    return await wrapped_inner(event, kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/dispatcher/event/handler.py", line 71, in call
+    return await wrapped()
+           ^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/dispatcher/dispatcher.py", line 283, in _listen_update
+    return await self.propagate_event(update_type=update_type, event=event, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/dispatcher/router.py", line 167, in propagate_event
+    return await observer.wrap_outer_middleware(_wrapped, event=event, data=kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/dispatcher/router.py", line 159, in _wrapped
+    return await self._propagate_event(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/dispatcher/router.py", line 195, in _propagate_event
+    response = await router.propagate_event(update_type=update_type, event=event, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/dispatcher/router.py", line 167, in propagate_event
+    return await observer.wrap_outer_middleware(_wrapped, event=event, data=kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/dispatcher/router.py", line 159, in _wrapped
+    return await self._propagate_event(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/dispatcher/router.py", line 187, in _propagate_event
+    response = await observer.trigger(event, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/dispatcher/event/telegram.py", line 126, in trigger
+    return await wrapped_inner(event, kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/dispatcher/event/handler.py", line 71, in call
+    return await wrapped()
+           ^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/handlers/browse.py", line 1185, in cb_reaction
+    await callback.answer("Лайк!" if reaction == "like" else "Дизлайк!")
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/methods/base.py", line 82, in emit
+    return await bot(self)
+           ^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/client/bot.py", line 514, in __call__
+    return await self.session(self, method, timeout=request_timeout)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/client/session/base.py", line 259, in __call__
+    return cast(TelegramType, await middleware(bot, method))
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/client/session/aiohttp.py", line 177, in make_request
+    response = self.check_response(
+        bot=bot,
+    ...<2 lines>...
+        content=raw_result,
+    )
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/client/session/base.py", line 121, in check_response
+    raise TelegramBadRequest(method=method, message=description)
+aiogram.exceptions.TelegramBadRequest: Telegram server says - Bad Request: query is too old and response timeout expired or query ID is invalid
+2026-08-20 16:41:21 [INFO] aiogram.event: Update id=486774019 is not handled. Duration 19245 ms by bot id=8830460693
+2026-08-20 16:41:21 [ERROR] aiogram.event: Cause exception while process update id=486774019 by bot id=8830460693
+TelegramBadRequest: Telegram server says - Bad Request: query is too old and response timeout expired or query ID is invalid
+Traceback (most recent call last):
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/dispatcher/dispatcher.py", line 320, in _process_update
+    response = await self.feed_update(bot, update, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/dispatcher/dispatcher.py", line 164, in feed_update
+    response = await self.update.wrap_outer_middleware(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<7 lines>...
+    )
+    ^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/dispatcher/middlewares/error.py", line 27, in __call__
+    return await handler(event, data)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/dispatcher/middlewares/user_context.py", line 58, in __call__
+    return await handler(event, data)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/fsm/middleware.py", line 43, in __call__
+    return await handler(event, data)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/logging_middleware.py", line 158, in __call__
+    result = await handler(event, data)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/logging_middleware.py", line 35, in __call__
+    return await handler(event, data)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/logging_middleware.py", line 120, in __call__
+    return await handler(event, data)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/dispatcher/event/telegram.py", line 126, in trigger
+    return await wrapped_inner(event, kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/dispatcher/event/handler.py", line 71, in call
+    return await wrapped()
+           ^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/dispatcher/dispatcher.py", line 283, in _listen_update
+    return await self.propagate_event(update_type=update_type, event=event, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/dispatcher/router.py", line 167, in propagate_event
+    return await observer.wrap_outer_middleware(_wrapped, event=event, data=kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/dispatcher/router.py", line 159, in _wrapped
+    return await self._propagate_event(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/dispatcher/router.py", line 195, in _propagate_event
+    response = await router.propagate_event(update_type=update_type, event=event, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/dispatcher/router.py", line 167, in propagate_event
+    return await observer.wrap_outer_middleware(_wrapped, event=event, data=kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/dispatcher/router.py", line 159, in _wrapped
+    return await self._propagate_event(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+    )
+    ^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/dispatcher/router.py", line 187, in _propagate_event
+    response = await observer.trigger(event, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/dispatcher/event/telegram.py", line 126, in trigger
+    return await wrapped_inner(event, kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/dispatcher/event/handler.py", line 71, in call
+    return await wrapped()
+           ^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/handlers/browse.py", line 1185, in cb_reaction
+    await callback.answer("Лайк!" if reaction == "like" else "Дизлайк!")
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/methods/base.py", line 82, in emit
+    return await bot(self)
+           ^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/client/bot.py", line 514, in __call__
+    return await self.session(self, method, timeout=request_timeout)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/client/session/base.py", line 259, in __call__
+    return cast(TelegramType, await middleware(bot, method))
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/client/session/aiohttp.py", line 177, in make_request
+    response = self.check_response(
+        bot=bot,
+    ...<2 lines>...
+        content=raw_result,
+    )
+  File "/Users/kirill/Desktop/esp/temka/crushok_botz/.venv/lib/python3.13/site-packages/aiogram/client/session/base.py", line 121, in check_response
+    raise TelegramBadRequest(method=method, message=description)
+aiogram.exceptions.TelegramBadRequest: Telegram server says - Bad Request: query is too old and response timeout expired or query ID is invalid
+2026-08-20 16:41:28 [INFO] aiogram.event: Update id=486774021 is handled. Duration 553 ms by bot id=8830460693
+2026-08-20 16:49:39 [WARNING] aiogram.dispatcher: Received SIGINT signal
+2026-08-20 16:49:39 [INFO] aiogram.dispatcher: Polling stopped for bot @kruzhook_bot id=8830460693 - 'Кругляш Бот'
+2026-08-20 16:49:39 [INFO] aiogram.dispatcher: Polling stopped
+2026-08-20 16:49:39 [INFO] __main__: Начинаю корректное завершение работы...
+2026-08-20 16:49:39 [INFO] __main__: Бот успешно остановлен
+2026-08-20 16:49:39 [INFO] __main__: 👋 Работа бота завершена
